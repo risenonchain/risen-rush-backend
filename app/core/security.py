@@ -1,4 +1,3 @@
-import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -9,27 +8,17 @@ from app.core.config import settings
 
 
 pwd_context = CryptContext(
-    schemes=["bcrypt"],
+    schemes=["argon2"],
     deprecated="auto",
 )
 
 
-def _normalize_password(password: str) -> str:
-    """
-    Pre-hash the raw password with SHA-256 so bcrypt always receives
-    a fixed-length safe input and never hits the 72-byte limit.
-    """
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
-
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    normalized = _normalize_password(plain_password)
-    return pwd_context.verify(normalized, hashed_password)
+    return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    normalized = _normalize_password(password)
-    return pwd_context.hash(normalized)
+    return pwd_context.hash(password)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

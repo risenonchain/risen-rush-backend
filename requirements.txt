@@ -3,7 +3,7 @@ uvicorn[standard]
 sqlalchemy
 pydantic
 python-jose[cryptography]
-passlib[bcrypt]
-bcrypt
+passlib[argon2]
+argon2-cffi
 python-multipart
 email-validator
