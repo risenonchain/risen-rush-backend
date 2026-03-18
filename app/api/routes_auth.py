@@ -28,20 +28,30 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     if existing_username:
         raise HTTPException(status_code=400, detail="Username already taken")
 
-    new_user = User(
-        email=payload.email,
-        username=payload.username,
-        password_hash=get_password_hash(payload.password),
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    try:
+        new_user = User(
+            email=payload.email,
+            username=payload.username,
+            password_hash=get_password_hash(payload.password),
+        )
+        db.add(new_user)
+        db.flush()
 
-    wallet = PointWallet(user_id=new_user.id)
-    db.add(wallet)
-    db.commit()
+        wallet = PointWallet(
+            user_id=new_user.id,
+            total_points_earned=0,
+            available_points=0,
+            claimed_points=0,
+        )
+        db.add(wallet)
 
-    return new_user
+        db.commit()
+        db.refresh(new_user)
+        return new_user
+
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.post("/login", response_model=TokenResponse)
