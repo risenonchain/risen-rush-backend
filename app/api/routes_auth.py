@@ -6,6 +6,7 @@ from app.core.security import (
     create_access_token,
     decode_access_token,
     get_password_hash,
+    pwd_context,
     verify_password,
 )
 from app.db.database import get_db
@@ -53,7 +54,10 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Registration failed: {type(e).__name__}: {str(e)}",
+            detail=(
+                f"Registration failed | scheme={pwd_context.schemes()} | "
+                f"type={type(e).__name__} | error={str(e)}"
+            ),
         )
 
 

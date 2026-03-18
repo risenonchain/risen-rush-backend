@@ -1,118 +1,49 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
-from app.core.security import (
-    create_access_token,
-    decode_access_token,
-    get_password_hash,
-    pwd_context,
-    verify_password,
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
+from app.core.config import settings
+
+
+pwd_context = CryptContext(
+    schemes=["bcrypt_sha256"],
+    deprecated="auto",
 )
-from app.db.database import get_db
-from app.models.point_wallet import PointWallet
-from app.models.user import User
-from app.schemas.auth import RegisterRequest, TokenResponse, UserResponse
-
-router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    existing_email = db.query(User).filter(User.email == payload.email).first()
-    if existing_email:
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    existing_username = db.query(User).filter(User.username == payload.username).first()
-    if existing_username:
-        raise HTTPException(status_code=400, detail="Username already taken")
-
-    try:
-        new_user = User(
-            email=payload.email,
-            username=payload.username,
-            password_hash=get_password_hash(payload.password),
-        )
-        db.add(new_user)
-        db.flush()
-
-        wallet = PointWallet(
-            user_id=new_user.id,
-            total_points_earned=0,
-            available_points=0,
-            claimed_points=0,
-        )
-        db.add(wallet)
-
-        db.commit()
-        db.refresh(new_user)
-        return new_user
-
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                f"Registration failed | scheme={pwd_context.schemes()} | "
-                f"type={type(e).__name__} | error={str(e)}"
-            ),
-        )
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
 
-@router.post("/login", response_model=TokenResponse)
-def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db),
-):
-    user = db.query(User).filter(User.email == form_data.username).first()
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
 
-    if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-        )
 
-    token = create_access_token(
-        data={
-            "sub": str(user.id),
-            "email": user.email,
-            "username": user.username,
-        }
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    to_encode = data.copy()
+
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
+    to_encode.update({"exp": expire})
 
-    return TokenResponse(access_token=token)
+    encoded_jwt = jwt.encode(
+        to_encode,
+        settings.secret_key,
+        algorithm=settings.algorithm,
+    )
+    return encoded_jwt
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-) -> User:
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+def decode_access_token(token: str) -> Optional[dict]:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
         )
-
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
-        )
-
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-
-    return user
-
-
-@router.get("/me", response_model=UserResponse)
-def me(current_user: User = Depends(get_current_user)):
-    return current_user
+        return payload
+    except JWTError:
+        return None
