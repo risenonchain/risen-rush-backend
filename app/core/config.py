@@ -6,7 +6,7 @@ class Settings(BaseModel):
     secret_key: str = "change-this-in-production-super-secret-risen-rush-key"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24
-    database_url: str = "sqlite:///./risen_rush.db"
+    database_url: str = "sqlite:///./risen_rush.db_v2"
 
 
 settings = Settings()
