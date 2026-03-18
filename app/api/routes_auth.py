@@ -49,9 +49,12 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         db.refresh(new_user)
         return new_user
 
-    except Exception:
+    except Exception as e:
         db.rollback()
-        raise
+        raise HTTPException(
+            status_code=500,
+            detail=f"Registration failed: {type(e).__name__}: {str(e)}",
+        )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -59,7 +62,6 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    # Swagger sends "username"; for us, that is the user's email
     user = db.query(User).filter(User.email == form_data.username).first()
 
     if not user or not verify_password(form_data.password, user.password_hash):
