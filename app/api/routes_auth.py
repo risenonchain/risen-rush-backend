@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -98,17 +100,15 @@ def login(
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
 def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
-    MVP reset flow:
+    MVP reset flow for active testing:
     - if user exists, create a reset token and expiry
     - return the token in response for testing/admin use
-    - if user does not exist, still return a generic success message
+    - if user does not exist, return 404 so debugging is obvious
     """
     user = db.query(User).filter(User.email == payload.email).first()
 
-    generic_message = "If an account with that email exists, a reset token has been generated."
-
     if not user:
-        return ForgotPasswordResponse(message=generic_message)
+        raise HTTPException(status_code=404, detail="No account found with that email")
 
     try:
         reset_token = create_password_reset_token()
@@ -121,7 +121,7 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
         db.commit()
 
         return ForgotPasswordResponse(
-            message=generic_message,
+            message="Reset token generated successfully.",
             reset_token=reset_token,
             expires_at=expires_at.isoformat(),
         )
@@ -140,7 +140,7 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
     if not user:
         raise HTTPException(status_code=400, detail="Invalid reset token")
 
-    if not user.reset_token_expires_at or user.reset_token_expires_at < __import__("datetime").datetime.utcnow():
+    if not user.reset_token_expires_at or user.reset_token_expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Reset token has expired")
 
     try:
