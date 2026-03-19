@@ -11,6 +11,7 @@ from app.models.user import User  # noqa: F401
 from app.models.daily_trial import DailyTrial  # noqa: F401
 from app.models.game_session import GameSession  # noqa: F401
 from app.models.point_wallet import PointWallet  # noqa: F401
+from app.db.migrations import run_migrations
 
 
 Base.metadata.create_all(bind=engine)
@@ -46,3 +47,7 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.on_event("startup")
+def startup():
+    run_migrations()

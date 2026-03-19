@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from secrets import token_urlsafe
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -11,6 +12,8 @@ pwd_context = CryptContext(
     schemes=["argon2"],
     deprecated="auto",
 )
+
+PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = 30
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -47,3 +50,11 @@ def decode_access_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def create_password_reset_token() -> str:
+    return token_urlsafe(32)
+
+
+def get_password_reset_expiry() -> datetime:
+    return datetime.utcnow() + timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES)

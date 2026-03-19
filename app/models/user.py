@@ -16,4 +16,7 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     email_verified = Column(Boolean, default=False, nullable=False)
 
+    reset_token = Column(String, unique=True, index=True, nullable=True)
+    reset_token_expires_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

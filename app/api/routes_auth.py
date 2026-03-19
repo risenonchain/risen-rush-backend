@@ -4,15 +4,25 @@ from sqlalchemy.orm import Session
 
 from app.core.security import (
     create_access_token,
+    create_password_reset_token,
     decode_access_token,
     get_password_hash,
+    get_password_reset_expiry,
     pwd_context,
     verify_password,
 )
 from app.db.database import get_db
 from app.models.point_wallet import PointWallet
 from app.models.user import User
-from app.schemas.auth import RegisterRequest, TokenResponse, UserResponse
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    MessageResponse,
+    RegisterRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+    UserResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -83,6 +93,71 @@ def login(
     )
 
     return TokenResponse(access_token=token)
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    MVP reset flow:
+    - if user exists, create a reset token and expiry
+    - return the token in response for testing/admin use
+    - if user does not exist, still return a generic success message
+    """
+    user = db.query(User).filter(User.email == payload.email).first()
+
+    generic_message = "If an account with that email exists, a reset token has been generated."
+
+    if not user:
+        return ForgotPasswordResponse(message=generic_message)
+
+    try:
+        reset_token = create_password_reset_token()
+        expires_at = get_password_reset_expiry()
+
+        user.reset_token = reset_token
+        user.reset_token_expires_at = expires_at
+
+        db.add(user)
+        db.commit()
+
+        return ForgotPasswordResponse(
+            message=generic_message,
+            reset_token=reset_token,
+            expires_at=expires_at.isoformat(),
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate reset token: {type(e).__name__} | {str(e)}",
+        )
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.reset_token == payload.token).first()
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid reset token")
+
+    if not user.reset_token_expires_at or user.reset_token_expires_at < __import__("datetime").datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Reset token has expired")
+
+    try:
+        user.password_hash = get_password_hash(payload.new_password)
+        user.reset_token = None
+        user.reset_token_expires_at = None
+
+        db.add(user)
+        db.commit()
+
+        return MessageResponse(message="Password reset successful")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to reset password: {type(e).__name__} | {str(e)}",
+        )
 
 
 def get_current_user(
