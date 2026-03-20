@@ -1,17 +1,21 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import settings
 from app.api.routes_auth import router as auth_router
 from app.api.routes_game import router as rush_router
 from app.api.routes_leaderboard import router as leaderboard_router
-
 from app.db.database import Base, engine
 
-# Import models BEFORE create_all
 from app.models.user import User  # noqa
 from app.models.daily_trial import DailyTrial  # noqa
 from app.models.game_session import GameSession  # noqa
 from app.models.point_wallet import PointWallet  # noqa
+
+print("DATABASE_URL IN USE:", settings.database_url)
+
+Base.metadata.create_all(bind=engine)
+print("TABLE CREATION ATTEMPTED")
 
 app = FastAPI(title="RISEN Rush API", version="1.0.0")
 
@@ -28,9 +32,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ CREATE TABLES IN POSTGRES
-Base.metadata.create_all(bind=engine)
-
 app.include_router(auth_router)
 app.include_router(rush_router)
 app.include_router(leaderboard_router)
@@ -38,10 +39,7 @@ app.include_router(leaderboard_router)
 
 @app.get("/")
 def root():
-    return {
-        "message": "RISEN Rush API is running",
-        "docs": "/docs",
-    }
+    return {"message": "RISEN Rush API is running", "docs": "/docs"}
 
 
 @app.get("/health")
