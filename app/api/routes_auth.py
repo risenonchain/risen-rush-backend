@@ -1,9 +1,12 @@
 from datetime import datetime
+from secrets import token_urlsafe
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import requests
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import (
     create_access_token,
     create_password_reset_token,
@@ -30,9 +33,75 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+
+
+def generate_referral_code() -> str:
+    return token_urlsafe(6).replace("-", "").replace("_", "").upper()
+
+
+def generate_unique_referral_code(db: Session) -> str:
+    while True:
+        code = generate_referral_code()
+        existing = db.query(User).filter(User.referral_code == code).first()
+        if not existing:
+            return code
+
+
+def get_request_ip(request: Request) -> str | None:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return None
+
+
+def verify_turnstile_or_raise(request: Request, action: str) -> None:
+    if not settings.turnstile_enabled:
+        return
+
+    token = request.headers.get("X-Turnstile-Token")
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Turnstile verification is required for {action}",
+        )
+
+    remoteip = get_request_ip(request)
+
+    try:
+        response = requests.post(
+            TURNSTILE_VERIFY_URL,
+            data={
+                "secret": settings.turnstile_secret_key,
+                "response": token,
+                "remoteip": remoteip,
+            },
+            timeout=10,
+        )
+        result = response.json()
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Turnstile verification service is unavailable",
+        )
+
+    if not result.get("success", False):
+        raise HTTPException(
+            status_code=400,
+            detail="Turnstile verification failed",
+        )
+
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+def register(
+    payload: RegisterRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    verify_turnstile_or_raise(request, "registration")
+
     existing_email = db.query(User).filter(User.email == payload.email).first()
     if existing_email:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -41,11 +110,26 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     if existing_username:
         raise HTTPException(status_code=400, detail="Username already taken")
 
+    referred_by_user_id = None
+    if payload.referral_code:
+        referrer = (
+            db.query(User)
+            .filter(User.referral_code == payload.referral_code.strip().upper())
+            .first()
+        )
+        if not referrer:
+            raise HTTPException(status_code=400, detail="Invalid referral code")
+        referred_by_user_id = referrer.id
+
     try:
         new_user = User(
             email=payload.email,
             username=payload.username,
             password_hash=get_password_hash(payload.password),
+            referral_code=generate_unique_referral_code(db),
+            referred_by_user_id=referred_by_user_id,
+            vault_trials=0,
+            is_admin=False,
         )
         db.add(new_user)
         db.flush()
@@ -62,6 +146,9 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         db.refresh(new_user)
         return new_user
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -74,10 +161,13 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(
+async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
+    verify_turnstile_or_raise(request, "login")
+
     user = db.query(User).filter(User.email == form_data.username).first()
 
     if not user or not verify_password(form_data.password, user.password_hash):
@@ -91,6 +181,7 @@ def login(
             "sub": str(user.id),
             "email": user.email,
             "username": user.username,
+            "is_admin": user.is_admin,
         }
     )
 
@@ -99,12 +190,6 @@ def login(
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
 def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    """
-    MVP reset flow for active testing:
-    - if user exists, create a reset token and expiry
-    - return the token in response for testing/admin use
-    - if user does not exist, return 404 so debugging is obvious
-    """
     user = db.query(User).filter(User.email == payload.email).first()
 
     if not user:

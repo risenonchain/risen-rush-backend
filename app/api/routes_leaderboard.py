@@ -1,30 +1,18 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.models.user import User
 from app.models.game_session import GameSession
+from app.models.user import User
 
 router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
 
+LEADERBOARD_LIMIT = 20
 
-@router.get("/global")
-def get_global_leaderboard(db: Session = Depends(get_db)):
-    """
-    Return top 50 players ranked by highest recorded finished Rush score.
 
-    Flat array response shape:
-    [
-      {
-        "rank": 1,
-        "username": "player1",
-        "score": 120,
-        "level": 3
-      }
-    ]
-    """
-
+@router.get("/top-score")
+def get_top_score_leaderboard(db: Session = Depends(get_db)):
     results = (
         db.query(
             User.id.label("user_id"),
@@ -43,11 +31,11 @@ def get_global_leaderboard(db: Session = Depends(get_db)):
             func.max(GameSession.level_reached).desc(),
             User.username.asc(),
         )
-        .limit(50)
+        .limit(LEADERBOARD_LIMIT)
         .all()
     )
 
-    leaderboard = [
+    return [
         {
             "rank": index,
             "username": row.username,
@@ -57,4 +45,43 @@ def get_global_leaderboard(db: Session = Depends(get_db)):
         for index, row in enumerate(results, start=1)
     ]
 
-    return leaderboard
+
+@router.get("/top-level")
+def get_top_level_leaderboard(db: Session = Depends(get_db)):
+    results = (
+        db.query(
+            User.id.label("user_id"),
+            User.username.label("username"),
+            func.max(GameSession.final_score).label("score"),
+            func.max(GameSession.level_reached).label("level"),
+        )
+        .join(GameSession, GameSession.user_id == User.id)
+        .filter(
+            GameSession.status == "finished",
+            GameSession.level_reached.isnot(None),
+        )
+        .group_by(User.id, User.username)
+        .order_by(
+            func.max(GameSession.level_reached).desc(),
+            func.max(GameSession.final_score).desc(),
+            User.username.asc(),
+        )
+        .limit(LEADERBOARD_LIMIT)
+        .all()
+    )
+
+    return [
+        {
+            "rank": index,
+            "username": row.username,
+            "score": int(row.score or 0),
+            "level": int(row.level or 1),
+        }
+        for index, row in enumerate(results, start=1)
+    ]
+
+
+@router.get("/global")
+def get_global_leaderboard(db: Session = Depends(get_db)):
+    # Backward-compatible alias to top-score leaderboard
+    return get_top_score_leaderboard(db)

@@ -17,9 +17,13 @@ class Settings(BaseModel):
     )
 
     database_url: str = os.getenv(
-        "DATABASE_URL",  # 👈 THIS is the key
+        "DATABASE_URL",
         "sqlite:///./risen_rush.db_v2",
     )
+
+    turnstile_secret_key: str = os.getenv("TURNSTILE_SECRET_KEY", "")
+    turnstile_site_key: str = os.getenv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "")
+    turnstile_enabled: bool = os.getenv("TURNSTILE_ENABLED", "false").lower() == "true"
 
 
 settings = Settings()

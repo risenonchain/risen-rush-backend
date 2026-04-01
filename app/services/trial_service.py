@@ -3,6 +3,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.models.daily_trial import DailyTrial
+from app.models.user import User
 
 
 MAX_DAILY_TRIALS = 3
@@ -26,24 +27,44 @@ def get_or_create_today_trial(user_id: int, db: Session) -> DailyTrial:
     return trial
 
 
-def get_remaining_trials(user_id: int, db: Session) -> int:
+def get_daily_trials_remaining(user_id: int, db: Session) -> int:
     trial = get_or_create_today_trial(user_id, db)
-
     max_trials = MAX_DAILY_TRIALS + trial.extra_trials_purchased
     remaining = max_trials - trial.trials_used
-
     return max(remaining, 0)
 
 
-def consume_trial(user_id: int, db: Session):
+def get_vault_trials_remaining(user_id: int, db: Session) -> int:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return 0
+    return max(user.vault_trials or 0, 0)
+
+
+def get_remaining_trials(user_id: int, db: Session) -> int:
+    daily_remaining = get_daily_trials_remaining(user_id, db)
+    vault_remaining = get_vault_trials_remaining(user_id, db)
+    return daily_remaining + vault_remaining
+
+
+def consume_trial(user_id: int, db: Session) -> tuple[bool, str | None]:
     trial = get_or_create_today_trial(user_id, db)
+    user = db.query(User).filter(User.id == user_id).first()
 
-    max_trials = MAX_DAILY_TRIALS + trial.extra_trials_purchased
+    if not user:
+        return False, None
 
-    if trial.trials_used >= max_trials:
-        return False
+    max_daily_trials = MAX_DAILY_TRIALS + trial.extra_trials_purchased
 
-    trial.trials_used += 1
-    db.commit()
+    if trial.trials_used < max_daily_trials:
+        trial.trials_used += 1
+        db.commit()
+        return True, "daily"
 
-    return True
+    if (user.vault_trials or 0) > 0:
+        user.vault_trials -= 1
+        db.add(user)
+        db.commit()
+        return True, "vault"
+
+    return False, None
