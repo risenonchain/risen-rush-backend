@@ -8,3 +8,4 @@ argon2-cffi
 python-multipart
 email-validator
 psycopg2-binary
+requests
