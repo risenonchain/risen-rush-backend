@@ -12,7 +12,7 @@ from app.models.game_session import GameSession
 from app.models.point_wallet import PointWallet
 from app.models.referral_reward import ReferralReward
 from app.models.user import User
-from app.models.user_device import UserDevice
+#from app.models.user_device import UserDevice
 from app.schemas.game import (
     FinishSessionRequest,
     StartSessionRequest,
