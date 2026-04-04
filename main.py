@@ -14,7 +14,7 @@ from app.models.daily_trial import DailyTrial  # noqa
 from app.models.game_session import GameSession  # noqa
 from app.models.point_wallet import PointWallet  # noqa
 from app.models.referral_reward import ReferralReward  # noqa
-from app.models.user_device import UserDevice  # noqa
+#from app.models.user_device import UserDevice  # noqa
 from app.models.redemption_request import RedemptionRequest  # noqa
 
 print("DATABASE_URL IN USE:", settings.database_url)
