@@ -1,3 +1,4 @@
+"""
 from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
@@ -21,3 +22,6 @@ class UserDevice(Base):
 
     is_blocked = Column(Boolean, default=False, nullable=False)
     note = Column(String, nullable=True)
+
+
+"""
