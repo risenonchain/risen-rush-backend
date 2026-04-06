@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 
 class StartSessionRequest(BaseModel):
-    device_fingerprint: str = Field(min_length=8, max_length=255)
+    pass
 
 
 class StartSessionResponse(BaseModel):
@@ -21,7 +21,6 @@ class FinishSessionRequest(BaseModel):
     duration_seconds: int
     level_reached: int
     lives_remaining: int
-    device_fingerprint: str = Field(min_length=8, max_length=255)
 
 
 class WalletResponse(BaseModel):
