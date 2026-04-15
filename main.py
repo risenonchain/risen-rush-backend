@@ -7,6 +7,7 @@ from app.api.routes_game import router as rush_router
 from app.api.routes_leaderboard import router as leaderboard_router
 from app.api.routes_profile import router as profile_router
 from app.api.routes_admin import router as admin_router
+from app.api.routes_admin_auth import router as admin_auth_router
 from app.db.database import Base, engine
 
 from app.models.user import User  # noqa
@@ -34,11 +35,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 app.include_router(auth_router)
 app.include_router(rush_router)
 app.include_router(leaderboard_router)
 app.include_router(profile_router)
 app.include_router(admin_router)
+app.include_router(admin_auth_router)
 
 
 @app.get("/")
