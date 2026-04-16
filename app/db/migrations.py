@@ -16,4 +16,21 @@ def run_migrations():
         except Exception:
             pass
 
+        # Create news table if not exists
+        try:
+            conn.execute(text('''
+                CREATE TABLE IF NOT EXISTS news (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title VARCHAR(200) NOT NULL,
+                    summary VARCHAR(300) NOT NULL,
+                    details TEXT NOT NULL,
+                    url VARCHAR(300),
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME
+                )
+            '''))
+        except Exception:
+            pass
+
         conn.commit()
