@@ -16,6 +16,7 @@ class RedemptionRequest(Base):
     wallet_address_snapshot = Column(String, nullable=False)
 
     points_requested = Column(Integer, nullable=False)
+    rsn_amount = Column(Integer, nullable=True)  # RSN equivalent of points_requested
     status = Column(String, default="pending", nullable=False, index=True)
 
     reviewed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)

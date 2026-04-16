@@ -164,12 +164,16 @@ def create_redemption_request(
     wallet.available_points -= payload.points_requested
     db.add(wallet)
 
+
+    # Calculate RSN amount (1 RSN = 1,000 points)
+    rsn_amount = payload.points_requested // 1000
     request_row = RedemptionRequest(
         user_id=current_user.id,
         username_snapshot=current_user.username,
         email_snapshot=current_user.email,
         wallet_address_snapshot=wallet_address,
         points_requested=payload.points_requested,
+        rsn_amount=rsn_amount,
         status="pending",
     )
 
