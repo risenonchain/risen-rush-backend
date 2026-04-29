@@ -1,10 +1,12 @@
 
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.db.database import get_db
 from app.models.user import User
 from app.api.routes_auth import get_current_user
+from pydantic import BaseModel
 import os
 import requests
 
@@ -13,12 +15,16 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
 PAYSTACK_VERIFY_URL = "https://api.paystack.co/transaction/verify/"
 
+class VerifyTransactionRequest(BaseModel):
+    reference_id: str
+
 @router.post("/verify-transaction")
 def verify_transaction(
-    reference_id: str,
+    payload: VerifyTransactionRequest,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    reference_id = payload.reference_id
     if not PAYSTACK_SECRET_KEY:
         raise HTTPException(status_code=500, detail="Paystack secret key not configured.")
 
