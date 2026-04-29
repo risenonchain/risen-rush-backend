@@ -10,6 +10,8 @@ from app.api.routes_admin import router as admin_router
 from app.api.routes_admin_auth import router as admin_auth_router
 from app.api.routes_news import router as news_router
 from app.api.routes_modal import router as modal_router
+from app.api.routes_ads import router as ads_router
+from app.api.routes_payments import router as payments_router
 from app.db.database import Base, engine
 
 from app.models.user import User  # noqa
@@ -48,6 +50,8 @@ app.include_router(admin_router)
 app.include_router(news_router)
 app.include_router(admin_auth_router)
 app.include_router(modal_router)
+app.include_router(ads_router)
+app.include_router(payments_router)
 
 
 @app.get("/")
