@@ -1,3 +1,44 @@
+# --- Paystack Webhook Handler ---
+from fastapi import Request
+import hmac
+import hashlib
+import base64
+
+# You should set this in your Render environment variables
+PAYSTACK_WEBHOOK_SECRET = os.getenv("PAYSTACK_WEBHOOK_SECRET")
+
+@router.post("/webhook")
+async def paystack_webhook(request: Request, db: Session = Depends(get_db)):
+    # Verify Paystack signature
+    raw_body = await request.body()
+    signature = request.headers.get("x-paystack-signature")
+    if PAYSTACK_WEBHOOK_SECRET:
+        expected = hmac.new(PAYSTACK_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha512).hexdigest()
+        if not hmac.compare_digest(signature or "", expected):
+            return {"status": False, "message": "Invalid signature"}
+    # Parse event
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"status": False, "message": "Invalid JSON"}
+    event = payload.get("event")
+    data = payload.get("data", {})
+    if event == "charge.success":
+        email = data.get("customer", {}).get("email")
+        amount = data.get("amount")
+        currency = data.get("currency", "").upper()
+        # Only process if $1 (100 cents) and USD or NGN (allow both for flexibility)
+        if email and amount and currency in ("USD", "NGN"):
+            # NGN is in kobo, USD in cents
+            if (currency == "USD" and amount == 100) or (currency == "NGN" and amount >= 100 * 100):
+                user = db.query(User).filter(User.email == email).first()
+                if user:
+                    user.is_premium = True
+                    user.premium_expires_at = datetime.utcnow() + timedelta(days=30)
+                    db.add(user)
+                    db.commit()
+                    return {"status": True, "message": "Premium updated"}
+    return {"status": True}
 
 
 from fastapi import APIRouter, Depends, HTTPException
