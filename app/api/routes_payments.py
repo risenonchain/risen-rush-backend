@@ -1,12 +1,22 @@
 
-# --- Paystack Webhook Handler ---
-import os  # Ensure os is imported before use
-from fastapi import Request
+
+# --- Imports and router definition must come first ---
+import os
 import hmac
 import hashlib
 import base64
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+from app.db.database import get_db
+from app.models.user import User
+from app.api.routes_auth import get_current_user
+from pydantic import BaseModel
+import requests
 
-# You should set this in your Render environment variables
+router = APIRouter(prefix="/payments", tags=["Payments"])
+
+# --- Paystack Webhook Handler ---
 PAYSTACK_WEBHOOK_SECRET = os.getenv("PAYSTACK_WEBHOOK_SECRET")
 
 @router.post("/webhook")
