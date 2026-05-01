@@ -35,12 +35,16 @@ def get_top_score_leaderboard(db: Session = Depends(get_db)):
         .all()
     )
 
+    # Fetch is_premium for each user
+    user_ids = [row.user_id for row in results]
+    premium_map = {u.id: u.is_premium for u in db.query(User).filter(User.id.in_(user_ids)).all()}
     return [
         {
             "rank": index,
             "username": row.username,
             "score": int(row.score or 0),
             "level": int(row.level or 1),
+            "is_premium": premium_map.get(row.user_id, False),
         }
         for index, row in enumerate(results, start=1)
     ]
@@ -70,12 +74,15 @@ def get_top_level_leaderboard(db: Session = Depends(get_db)):
         .all()
     )
 
+    user_ids = [row.user_id for row in results]
+    premium_map = {u.id: u.is_premium for u in db.query(User).filter(User.id.in_(user_ids)).all()}
     return [
         {
             "rank": index,
             "username": row.username,
             "score": int(row.score or 0),
             "level": int(row.level or 1),
+            "is_premium": premium_map.get(row.user_id, False),
         }
         for index, row in enumerate(results, start=1)
     ]

@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
@@ -24,7 +24,39 @@ from app.models.redemption_request import RedemptionRequest  # noqa
 
 print("DATABASE_URL IN USE:", settings.database_url)
 
-app = FastAPI(title="RISEN Rush API", version="1.0.0")
+
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+import re
+
+MIN_APP_VERSION = "1.1.0"
+
+def parse_version(version_str):
+    # Accepts '1.2.3', '1.2', etc.
+    return tuple(int(x) for x in re.split(r'\.|-', version_str) if x.isdigit())
+
+def is_version_outdated(client_version, min_version):
+    try:
+        client_tuple = parse_version(client_version)
+        min_tuple = parse_version(min_version)
+        return client_tuple < min_tuple
+    except Exception:
+        return False  # If parsing fails, allow
+
+class VersionCheckMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Only check for API routes, skip docs/static
+        if request.url.path.startswith("/docs") or request.url.path.startswith("/openapi"):
+            return await call_next(request)
+        version = request.headers.get("X-App-Version")
+        if version and is_version_outdated(version, MIN_APP_VERSION):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Update Required: Please download the latest version."},
+            )
+        return await call_next(request)
+
+app.add_middleware(VersionCheckMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

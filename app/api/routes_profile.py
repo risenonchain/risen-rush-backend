@@ -250,6 +250,20 @@ def get_profile_stats(
         .scalar()
     ) or 0
 
+    # Calculate score_rank
+    user_best_score = best_session.final_score if best_session else 0
+    user_best_level = best_session.level_reached if best_session else 1
+    # Score rank
+    score_rank = db.query(GameSession)
+        .filter(GameSession.status == "finished")
+        .filter(GameSession.final_score > user_best_score)
+        .count() + 1 if user_best_score > 0 else None
+    # Level rank
+    level_rank = db.query(GameSession)
+        .filter(GameSession.status == "finished")
+        .filter(GameSession.level_reached > user_best_level)
+        .count() + 1 if user_best_level > 1 else None
+
     return {
         "username": current_user.username,
         "email": current_user.email,
@@ -257,10 +271,13 @@ def get_profile_stats(
         "avatar_url": current_user.avatar_url,
         "generated_avatar_url": current_user.generated_avatar_url,
         "vault_trials": current_user.vault_trials or 0,
-        "best_score": best_session.final_score if best_session else 0,
-        "best_level": best_session.level_reached if best_session else 1,
+        "best_score": user_best_score,
+        "best_level": user_best_level,
         "total_sessions": int(total_sessions),
         "total_points_earned": wallet.total_points_earned if wallet else 0,
         "available_points": wallet.available_points if wallet else 0,
         "claimed_points": wallet.claimed_points if wallet else 0,
+        "score_rank": score_rank,
+        "level_rank": level_rank,
+        "is_premium": current_user.is_premium,
     }

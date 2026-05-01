@@ -30,6 +30,18 @@ class User(Base):
 
     vault_trials = Column(Integer, default=0, nullable=False)
 
+    # Monetization
+    is_premium = Column(Boolean, default=False, nullable=False)
+    premium_expires_at = Column(DateTime, nullable=True)
+
+    # Gaming
+    best_score = Column(Integer, default=0, nullable=False)
+    best_level = Column(Integer, default=1, nullable=False)
+
+    # Ad Tracking
+    ads_watched_today = Column(Integer, default=0, nullable=False)
+    last_ad_date = Column(DateTime, nullable=True)
+
     is_admin = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

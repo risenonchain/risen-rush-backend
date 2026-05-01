@@ -12,8 +12,80 @@ import requests
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
+
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
+PAYSTACK_INITIALIZE_URL = "https://api.paystack.co/transaction/initialize"
 PAYSTACK_VERIFY_URL = "https://api.paystack.co/transaction/verify/"
+EXCHANGE_API_URL = "https://open.er-api.com/v6/latest/USD"
+
+# In-memory cache for exchange rate
+_exchange_cache = {"rate": None, "timestamp": None}
+_EXCHANGE_CACHE_SECONDS = 3 * 60 * 60  # 3 hours
+_FALLBACK_RATE = 1600.0
+_BUFFER = 1.02  # 2% buffer
+
+from threading import Lock
+_cache_lock = Lock()
+
+def get_cached_exchange_rate():
+    import time
+    now = time.time()
+    with _cache_lock:
+        if _exchange_cache["rate"] and _exchange_cache["timestamp"]:
+            if now - _exchange_cache["timestamp"] < _EXCHANGE_CACHE_SECONDS:
+                return _exchange_cache["rate"]
+        # Fetch new rate
+        try:
+            resp = requests.get(EXCHANGE_API_URL, timeout=5)
+            data = resp.json()
+            rate = float(data["rates"]["NGN"])
+            # Cache
+            _exchange_cache["rate"] = rate
+            _exchange_cache["timestamp"] = now
+            return rate
+        except Exception:
+            # Fallback
+            return _FALLBACK_RATE
+
+class InitializePaymentRequest(BaseModel):
+    product_id: str
+
+@router.post("/initialize")
+def initialize_payment(
+    payload: InitializePaymentRequest,
+    user: User = Depends(get_current_user)
+):
+    if payload.product_id != "risen_prime_monthly":
+        raise HTTPException(status_code=400, detail="Invalid product_id")
+
+    rate = get_cached_exchange_rate()
+    base_price_usd = 1.00
+    amount_ngn = int(base_price_usd * rate * 100 * _BUFFER)
+
+    # Prepare Paystack initialize
+    headers = {
+        "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}",
+        "Content-Type": "application/json"
+    }
+    paystack_payload = {
+        "email": user.email,
+        "amount": amount_ngn,
+        "currency": "NGN",
+        "reference": f"PRIME_{user.username}_{int(datetime.utcnow().timestamp())}",
+        "callback_url": None,
+        "metadata": {"product_id": payload.product_id}
+    }
+    try:
+        resp = requests.post(PAYSTACK_INITIALIZE_URL, json=paystack_payload, headers=headers, timeout=10)
+        data = resp.json()
+        if not data.get("status") or not data.get("data"):
+            raise HTTPException(status_code=502, detail="Paystack init failed")
+        checkout_url = data["data"].get("authorization_url")
+        if not checkout_url:
+            raise HTTPException(status_code=502, detail="Paystack did not return checkout url")
+        return {"checkout_url": checkout_url, "amount_ngn": amount_ngn, "rate": rate}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Paystack error: {str(e)}")
 
 class VerifyTransactionRequest(BaseModel):
     reference_id: str
