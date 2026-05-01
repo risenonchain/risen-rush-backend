@@ -1,4 +1,6 @@
+
 # --- Paystack Webhook Handler ---
+import os  # Ensure os is imported before use
 from fastapi import Request
 import hmac
 import hashlib
