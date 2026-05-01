@@ -140,6 +140,7 @@ def initialize_payment(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Paystack error: {str(e)}")
 
+
 class VerifyTransactionRequest(BaseModel):
     reference_id: str
 
@@ -167,15 +168,12 @@ def verify_transaction(
         raise HTTPException(status_code=400, detail="Invalid response from Paystack.")
 
     payment = data["data"]
-    if (
-        payment.get("status") == "success"
-        and payment.get("amount") == 100  # Paystack amount is in cents (1.00 USD = 100 cents)
-        and payment.get("currency", "").upper() == "USD"
-    ):
+    # Accept any amount/currency as long as status is success and reference matches
+    if payment.get("status") == "success":
         user.is_premium = True
         user.premium_expires_at = datetime.utcnow() + timedelta(days=30)
         db.add(user)
         db.commit()
         return {"message": "Premium activated"}
     else:
-        raise HTTPException(status_code=400, detail="Payment not valid or not for the correct amount/currency.")
+        raise HTTPException(status_code=400, detail="Payment not valid or not successful.")
