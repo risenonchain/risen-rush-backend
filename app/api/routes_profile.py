@@ -144,6 +144,29 @@ def create_redemption_request(
             detail="Requested points exceed available wallet points",
         )
 
+
+    # --- Monetization logic: Standard users limited to 1 redemption per month ---
+    from datetime import datetime
+    from sqlalchemy import extract
+
+    if not current_user.is_premium:
+        now = datetime.utcnow()
+        # Find any redemption request by this user in the current calendar month
+        monthly_request = (
+            db.query(RedemptionRequest)
+            .filter(
+                RedemptionRequest.user_id == current_user.id,
+                extract('year', RedemptionRequest.created_at) == now.year,
+                extract('month', RedemptionRequest.created_at) == now.month,
+            )
+            .first()
+        )
+        if monthly_request:
+            raise HTTPException(
+                status_code=403,
+                detail="Standard accounts are limited to one redemption per month. Upgrade to PRIME for unlimited monthly redemptions.",
+            )
+    # For all users: block multiple pending/approved requests
     pending_request = (
         db.query(RedemptionRequest)
         .filter(
