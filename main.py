@@ -25,9 +25,13 @@ from app.models.redemption_request import RedemptionRequest  # noqa
 print("DATABASE_URL IN USE:", settings.database_url)
 
 
+
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 import re
+
+# --- Ensure app is defined before middleware ---
+app = FastAPI()
 
 MIN_APP_VERSION = "1.1.0"
 
@@ -43,6 +47,7 @@ def is_version_outdated(client_version, min_version):
     except Exception:
         return False  # If parsing fails, allow
 
+
 class VersionCheckMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Only check for API routes, skip docs/static
@@ -55,6 +60,7 @@ class VersionCheckMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Update Required: Please download the latest version."},
             )
         return await call_next(request)
+
 
 app.add_middleware(VersionCheckMiddleware)
 
