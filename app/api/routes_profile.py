@@ -250,19 +250,30 @@ def get_profile_stats(
         .scalar()
     ) or 0
 
+
     # Calculate score_rank
     user_best_score = best_session.final_score if best_session else 0
     user_best_level = best_session.level_reached if best_session else 1
     # Score rank
-    score_rank = db.query(GameSession)
-        .filter(GameSession.status == "finished")
-        .filter(GameSession.final_score > user_best_score)
-        .count() + 1 if user_best_score > 0 else None
+    if user_best_score > 0:
+        score_rank = (
+            db.query(GameSession)
+            .filter(GameSession.status == "finished")
+            .filter(GameSession.final_score > user_best_score)
+            .count() + 1
+        )
+    else:
+        score_rank = None
     # Level rank
-    level_rank = db.query(GameSession)
-        .filter(GameSession.status == "finished")
-        .filter(GameSession.level_reached > user_best_level)
-        .count() + 1 if user_best_level > 1 else None
+    if user_best_level > 1:
+        level_rank = (
+            db.query(GameSession)
+            .filter(GameSession.status == "finished")
+            .filter(GameSession.level_reached > user_best_level)
+            .count() + 1
+        )
+    else:
+        level_rank = None
 
     return {
         "username": current_user.username,
