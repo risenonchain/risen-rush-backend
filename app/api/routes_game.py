@@ -87,15 +87,18 @@ def start_session(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+
     remaining = get_remaining_trials(current_user.id, db)
 
-    if remaining <= 0:
-        raise HTTPException(status_code=403, detail="No trials remaining today")
-
-    success, trial_source = consume_trial(current_user.id, db)
-
-    if not success:
-        raise HTTPException(status_code=403, detail="Trial limit reached")
+    # Premium users can always start a session
+    if current_user.is_premium:
+        success, trial_source = True, "premium"
+    else:
+        if remaining <= 0:
+            raise HTTPException(status_code=403, detail="No trials remaining today")
+        success, trial_source = consume_trial(current_user.id, db)
+        if not success:
+            raise HTTPException(status_code=403, detail="Trial limit reached")
 
     token = secrets.token_hex(16)
 
