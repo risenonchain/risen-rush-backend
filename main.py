@@ -81,9 +81,13 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(rush_router)
+
+from app.api.routes_league import router as league_router
+
 app.include_router(leaderboard_router)
 app.include_router(profile_router)
 app.include_router(admin_router)
+app.include_router(league_router)
 
 app.include_router(news_router)
 app.include_router(admin_auth_router)

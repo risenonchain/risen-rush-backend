@@ -25,4 +25,7 @@ class GameSession(Base):
     status = Column(String, default="active", nullable=False)
     validation_status = Column(String, default="pending", nullable=False)
 
+    is_league_game = Column(Boolean, default=False)  # NEW: True if this is a league game
+    league_match_id = Column(Integer, ForeignKey("league_matches.id"), nullable=True)  # NEW: link to league match
+
     user = relationship("User")
