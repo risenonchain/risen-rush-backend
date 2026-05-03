@@ -1,4 +1,35 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from typing import List
+from datetime import datetime
+import random
+
+from app.db.database import get_db
+from app.models.league import (
+    LeagueEvent, LeagueRegistration, LeagueParticipant,
+    LeagueFixture, LeagueMatch, LeagueStanding,
+    LeagueTopScore, LeagueDeepestRunner, LeagueAdminAudit
+)
+from app.models.user import User
+from app.api.routes_auth import get_current_user
+from app.schemas.league import (
+    LeagueEvent as LeagueEventSchema,
+    LeagueEventCreate,
+    LeagueRegistration as LeagueRegistrationSchema,
+    LeagueRegistrationCreate,
+    LeagueParticipant as LeagueParticipantSchema,
+    LeagueParticipantCreate,
+    LeagueFixture as LeagueFixtureSchema,
+    LeagueFixtureCreate,
+    LeagueMatch as LeagueMatchSchema,
+    LeagueMatchCreate,
+    LeagueStanding as LeagueStandingSchema,
+    LeagueTopScore as LeagueTopScoreSchema,
+    LeagueDeepestRunner as LeagueDeepestRunnerSchema,
+    LeagueAdminAudit as LeagueAdminAuditSchema,
+    # ... add others as needed
+)
 
 router = APIRouter(prefix="/league", tags=["League"])
 
@@ -103,29 +134,7 @@ def progress_group_stage(league_id: int, db: Session = Depends(get_db), current_
             db.add(fix)
     db.commit()
     return {"group_winners": group_winners, "groups": list(groups.keys())}
-from sqlalchemy.orm import Session
-from typing import List
-from datetime import datetime
 
-from app.db.database import get_db
-from app.models.league import (
-    LeagueEvent, LeagueRegistration, LeagueParticipant,
-    LeagueFixture, LeagueMatch, LeagueStanding,
-    LeagueTopScore, LeagueDeepestRunner, LeagueAdminAudit
-)
-from app.schemas.league import (
-    LeagueEvent as LeagueEventSchema,
-    LeagueEventCreate,
-    LeagueRegistration as LeagueRegistrationSchema,
-    LeagueRegistrationCreate,
-    LeagueParticipant as LeagueParticipantSchema,
-    LeagueParticipantCreate,
-    # ... add others as needed
-)
-from app.models.user import User
-from app.api.routes_auth import get_current_user
-
-router = APIRouter(prefix="/league", tags=["League"])
 
 # --- League Events ---
 @router.post("/events", response_model=LeagueEventSchema)
