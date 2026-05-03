@@ -1,3 +1,7 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+
+router = APIRouter(prefix="/league", tags=["League"])
+
 # --- Disqualify or Eliminate League Participant ---
 @router.post("/events/{league_id}/participants/{user_id}/disqualify")
 def disqualify_participant(league_id: int, user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -99,7 +103,6 @@ def progress_group_stage(league_id: int, db: Session = Depends(get_db), current_
             db.add(fix)
     db.commit()
     return {"group_winners": group_winners, "groups": list(groups.keys())}
-from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
