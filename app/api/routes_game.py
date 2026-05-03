@@ -1,4 +1,32 @@
 from app.models.league import LeagueParticipant, LeagueMatch, LeagueFixture
+
+import secrets
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.orm import Session
+
+from app.api.routes_auth import get_current_user
+from app.db.database import get_db
+from app.models.game_session import GameSession
+from app.models.point_wallet import PointWallet
+from app.models.referral_reward import ReferralReward
+from app.models.user import User
+from app.schemas.game import (
+    FinishSessionRequest,
+    StartSessionRequest,
+    StartSessionResponse,
+    WalletResponse,
+)
+from app.services.trial_service import (
+    consume_trial,
+    get_daily_trials_remaining,
+    get_remaining_trials,
+    get_vault_trials_remaining,
+)
+
+router = APIRouter(prefix="/rush", tags=["RISEN Rush"])
+
 # --- League Session Start (1 life, disqualification, etc.) ---
 @router.post("/league/session/start", response_model=StartSessionResponse)
 def start_league_session(
