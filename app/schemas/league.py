@@ -8,6 +8,8 @@ class LeagueEventBase(BaseModel):
     start_date: date
     end_date: date
     is_active: Optional[bool] = False
+    is_live_visible: Optional[bool] = False
+    live_fee_usd: Optional[int] = 30
 
 class LeagueEventCreate(LeagueEventBase):
     pass
@@ -30,6 +32,7 @@ class LeagueRegistrationCreate(LeagueRegistrationBase):
 class LeagueRegistration(LeagueRegistrationBase):
     id: int
     registered_at: Optional[datetime]
+    username: Optional[str] = None
     class Config:
         orm_mode = True
 
@@ -44,6 +47,8 @@ class LeagueParticipantCreate(LeagueParticipantBase):
 class LeagueParticipant(LeagueParticipantBase):
     id: int
     approved_at: Optional[datetime]
+    username: Optional[str] = None
+    status: Optional[str] = "active"
     class Config:
         orm_mode = True
 
@@ -61,6 +66,8 @@ class LeagueFixtureCreate(LeagueFixtureBase):
 class LeagueFixture(LeagueFixtureBase):
     id: int
     result_submitted: Optional[bool] = False
+    player1_username: Optional[str] = None
+    player2_username: Optional[str] = None
     class Config:
         orm_mode = True
 
@@ -93,6 +100,7 @@ class LeagueTopScoreCreate(LeagueTopScoreBase):
 class LeagueTopScore(LeagueTopScoreBase):
     id: int
     created_at: Optional[datetime]
+    username: Optional[str] = None
     class Config:
         orm_mode = True
 
@@ -109,6 +117,7 @@ class LeagueDeepestRunnerCreate(LeagueDeepestRunnerBase):
 class LeagueDeepestRunner(LeagueDeepestRunnerBase):
     id: int
     created_at: Optional[datetime]
+    username: Optional[str] = None
     class Config:
         orm_mode = True
 
@@ -130,6 +139,7 @@ class LeagueStandingCreate(LeagueStandingBase):
 class LeagueStanding(LeagueStandingBase):
     id: int
     created_at: Optional[datetime]
+    username: Optional[str] = None
     class Config:
         orm_mode = True
 
