@@ -68,15 +68,6 @@ class LeagueTopScore(Base):
     match_id = Column(Integer, ForeignKey("league_matches.id"))
     created_at = Column(DateTime)
 
-class LeagueLiveAccess(Base):
-    __tablename__ = "league_live_access"
-    id = Column(Integer, primary_key=True)
-    league_id = Column(Integer, ForeignKey("league_events.id"))
-    user_id = Column(Integer, ForeignKey("users.id"))
-    match_id = Column(Integer, ForeignKey("league_matches.id"), nullable=True)
-    purchased_at = Column(DateTime)
-    payment_reference = Column(String(100))
-
 class LeagueDeepestRunner(Base):
     __tablename__ = "league_deepest_runners"
     id = Column(Integer, primary_key=True)
@@ -85,15 +76,6 @@ class LeagueDeepestRunner(Base):
     level_reached = Column(Integer, nullable=False)
     match_id = Column(Integer, ForeignKey("league_matches.id"))
     created_at = Column(DateTime)
-
-class LeagueLiveAccess(Base):
-    __tablename__ = "league_live_access"
-    id = Column(Integer, primary_key=True)
-    league_id = Column(Integer, ForeignKey("league_events.id"))
-    user_id = Column(Integer, ForeignKey("users.id"))
-    match_id = Column(Integer, ForeignKey("league_matches.id"), nullable=True)
-    purchased_at = Column(DateTime)
-    payment_reference = Column(String(100))
 
 class LeagueStanding(Base):
     __tablename__ = "league_standings"
@@ -108,15 +90,6 @@ class LeagueStanding(Base):
     goals_for = Column(Integer, default=0)
     goals_against = Column(Integer, default=0)
     created_at = Column(DateTime)
-
-class LeagueLiveAccess(Base):
-    __tablename__ = "league_live_access"
-    id = Column(Integer, primary_key=True)
-    league_id = Column(Integer, ForeignKey("league_events.id"))
-    user_id = Column(Integer, ForeignKey("users.id"))
-    match_id = Column(Integer, ForeignKey("league_matches.id"), nullable=True)
-    purchased_at = Column(DateTime)
-    payment_reference = Column(String(100))
 
 class LeagueAdminAudit(Base):
     __tablename__ = "league_admin_audit"
