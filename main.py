@@ -13,6 +13,7 @@ from app.api.routes_modal import router as modal_router
 from app.api.routes_ads import router as ads_router
 from app.api.routes_payments import router as payments_router
 from app.db.database import Base, engine
+from app.db.migrations import run_migrations
 
 from app.models.user import User  # noqa
 from app.models.daily_trial import DailyTrial  # noqa
@@ -21,6 +22,11 @@ from app.models.point_wallet import PointWallet  # noqa
 from app.models.referral_reward import ReferralReward  # noqa
 #from app.models.user_device import UserDevice  # noqa
 from app.models.redemption_request import RedemptionRequest  # noqa
+from app.models.league import (  # noqa
+    LeagueEvent, LeagueRegistration, LeagueParticipant,
+    LeagueFixture, LeagueMatch, LeagueStanding,
+    LeagueTopScore, LeagueDeepestRunner, LeagueAdminAudit
+)
 
 print("DATABASE_URL IN USE:", settings.database_url)
 
@@ -32,6 +38,10 @@ import re
 
 # --- Ensure app is defined before middleware ---
 app = FastAPI()
+
+# Run manual migrations and create all tables
+run_migrations()
+Base.metadata.create_all(bind=engine)
 
 MIN_APP_VERSION = "1.1.0"
 

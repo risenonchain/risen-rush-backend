@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, aliased
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 import random
 
@@ -8,13 +8,15 @@ from app.db.database import get_db
 from app.models.league import (
     LeagueEvent, LeagueRegistration, LeagueParticipant,
     LeagueFixture, LeagueMatch, LeagueStanding,
-    LeagueTopScore, LeagueDeepestRunner, LeagueAdminAudit
+    LeagueTopScore, LeagueDeepestRunner, LeagueAdminAudit,
+    LeagueLiveAccess
 )
 from app.models.user import User
 from app.api.routes_auth import get_current_user
 from app.schemas.league import (
     LeagueEvent as LeagueEventSchema,
     LeagueEventCreate,
+    LeagueEventUpdate,
     LeagueRegistration as LeagueRegistrationSchema,
     LeagueRegistrationCreate,
     LeagueParticipant as LeagueParticipantSchema,
@@ -46,13 +48,32 @@ def list_league_events(db: Session = Depends(get_db)):
     return db.query(LeagueEvent).order_by(LeagueEvent.start_date.desc()).all()
 
 @router.patch("/events/{event_id}/active", response_model=LeagueEventSchema)
-def toggle_league_event_active(event_id: int, is_active: bool, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def toggle_league_event_active(
+    event_id: int,
+    is_active: Optional[bool] = Query(None),
+    update_data: Optional[LeagueEventUpdate] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     event = db.query(LeagueEvent).filter_by(id=event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="League event not found")
-    event.is_active = is_active
+
+    # Handle query param (backward compatibility)
+    if is_active is not None:
+        event.is_active = is_active
+
+    # Handle JSON body (new "Sync Broadcast Protocol" logic)
+    if update_data:
+        if update_data.is_active is not None:
+            event.is_active = update_data.is_active
+        if update_data.is_live_visible is not None:
+            event.is_live_visible = update_data.is_live_visible
+        if update_data.live_fee_usd is not None:
+            event.live_fee_usd = update_data.live_fee_usd
+
     db.commit()
     db.refresh(event)
     return event
@@ -210,3 +231,24 @@ def check_live_access(league_id: int, db: Session = Depends(get_db), current_use
     # Check if purchased
     access = db.query(LeagueLiveAccess).filter_by(league_id=league_id, user_id=current_user.id).first()
     return {"has_access": bool(access)}
+
+@router.get("/events/{league_id}/audit", response_model=List[LeagueAdminAuditSchema])
+@router.get("/events/{league_id}/admin-audit", response_model=List[LeagueAdminAuditSchema])
+def list_league_audit(league_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return db.query(LeagueAdminAudit).filter_by(league_id=league_id).order_by(LeagueAdminAudit.created_at.desc()).all()
+
+@router.post("/events/{league_id}/group/progress")
+def progress_group_stage(league_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    # Placeholder logic
+    return {"message": "Group stage progress protocol initialized (Stub)"}
+
+@router.post("/events/{league_id}/finals/generate")
+def generate_finals_matrix(league_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    # Placeholder logic
+    return {"message": "Finals matrix generation protocol initialized (Stub)"}

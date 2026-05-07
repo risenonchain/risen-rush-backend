@@ -14,6 +14,11 @@ class LeagueEventBase(BaseModel):
 class LeagueEventCreate(LeagueEventBase):
     pass
 
+class LeagueEventUpdate(BaseModel):
+    is_active: Optional[bool] = None
+    is_live_visible: Optional[bool] = None
+    live_fee_usd: Optional[int] = None
+
 class LeagueEvent(LeagueEventBase):
     id: int
     created_at: Optional[datetime]

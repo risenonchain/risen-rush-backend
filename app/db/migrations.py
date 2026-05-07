@@ -33,4 +33,21 @@ def run_migrations():
         except Exception:
             pass
 
+        # Create league_events table if not exists
+        try:
+            conn.execute(text('''
+                CREATE TABLE IF NOT EXISTS league_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(100) NOT NULL,
+                    start_date DATE NOT NULL,
+                    end_date DATE NOT NULL,
+                    is_active BOOLEAN DEFAULT 0,
+                    is_live_visible BOOLEAN DEFAULT 0,
+                    live_fee_usd INTEGER DEFAULT 30,
+                    created_at DATETIME
+                )
+            '''))
+        except Exception:
+            pass
+
         conn.commit()
