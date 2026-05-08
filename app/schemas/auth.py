@@ -55,6 +55,7 @@ class UserResponse(BaseModel):
     avatar_url: str | None = None
     generated_avatar_url: str | None = None
     vault_trials: int = 0
+    is_premium: bool = False
     is_admin: bool = False
 
     class Config:
