@@ -58,21 +58,21 @@ def is_version_outdated(client_version, min_version):
         return False  # If parsing fails, allow
 
 
-class VersionCheckMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        # Only check for API routes, skip docs/static
-        if request.url.path.startswith("/docs") or request.url.path.startswith("/openapi"):
-            return await call_next(request)
-        version = request.headers.get("X-App-Version")
-        if version and is_version_outdated(version, MIN_APP_VERSION):
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "Update Required: Please download the latest version."},
-            )
+@app.middleware("http")
+async def version_check_middleware(request: Request, call_next):
+    # Only check for API routes, skip docs/static
+    if request.url.path.startswith("/docs") or request.url.path.startswith("/openapi") or request.method == "OPTIONS":
         return await call_next(request)
 
+    version = request.headers.get("X-App-Version")
+    if version and is_version_outdated(version, MIN_APP_VERSION):
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Update Required: Please download the latest version."},
+        )
+    return await call_next(request)
 
-app.add_middleware(VersionCheckMiddleware)
+# app.add_middleware(VersionCheckMiddleware) # Removed BaseHTTPMiddleware version
 
 app.add_middleware(
     CORSMiddleware,
@@ -82,10 +82,12 @@ app.add_middleware(
         "https://app.risenonchain.net",
         "https://risenonchain.net",
         "https://www.risenonchain.net",
+        "https://risen-website-five.vercel.app", # Added common vercel origin just in case
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
