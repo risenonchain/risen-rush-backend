@@ -43,6 +43,7 @@ def process_match_completion(db: Session, match: LeagueMatch):
     if not fixture:
         return
 
+    # Only process if both have played OR it's being force-closed
     if match.player1_score is not None and match.player2_score is not None:
         # Determine winner
         if match.player1_score > match.player2_score:
@@ -64,3 +65,42 @@ def process_match_completion(db: Session, match: LeagueMatch):
         db.add(match)
         db.add(fixture)
         db.commit()
+
+def force_complete_match(db: Session, match_id: int, winner_id: int = None):
+    """
+    Force a match to complete, potentially awarding a win to one player if the other didn't play.
+    """
+    match = db.query(LeagueMatch).filter_by(id=match_id).first()
+    if not match:
+        return None
+
+    fixture = db.query(LeagueFixture).filter_by(id=match.fixture_id).first()
+    if not fixture:
+        return None
+
+    if winner_id:
+        match.winner_id = winner_id
+        # We assign scores if missing to allow standing updates
+        if match.player1_score is None: match.player1_score = 0
+        if match.player2_score is None: match.player2_score = 0
+
+        # Award points
+        p1_res = 'win' if winner_id == fixture.player1_id else 'loss'
+        p2_res = 'win' if winner_id == fixture.player2_id else 'loss'
+
+        update_league_standings(db, fixture.league_id, fixture.player1_id, match.player1_score, match.player2_score, p1_res)
+        update_league_standings(db, fixture.league_id, fixture.player2_id, match.player2_score, match.player1_score, p2_res)
+    else:
+        # It's a draw by default
+        if match.player1_score is None: match.player1_score = 0
+        if match.player2_score is None: match.player2_score = 0
+        update_league_standings(db, fixture.league_id, fixture.player1_id, match.player1_score, match.player2_score, 'draw')
+        update_league_standings(db, fixture.league_id, fixture.player2_id, match.player2_score, match.player1_score, 'draw')
+
+    match.played_at = datetime.utcnow()
+    fixture.result_submitted = True
+    db.add(match)
+    db.add(fixture)
+    db.commit()
+    return match
+

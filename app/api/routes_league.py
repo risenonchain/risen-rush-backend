@@ -33,6 +33,21 @@ from app.schemas.league import (
 
 router = APIRouter(prefix="/league", tags=["League"])
 
+@router.get("/events/{league_id}/my-status")
+def get_my_league_status(league_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Check registration
+    reg = db.query(LeagueRegistration).filter_by(league_id=league_id, user_id=current_user.id).first()
+    # Check participant
+    part = db.query(LeagueParticipant).filter_by(league_id=league_id, user_id=current_user.id).first()
+
+    status = "none"
+    if part:
+        status = part.status # 'active', 'disqualified', etc.
+    elif reg:
+        status = "registered" if reg.status == "approved" else "pending"
+
+    return {"status": status, "registration": reg, "participant": part}
+
 @router.post("/events", response_model=LeagueEventSchema)
 def create_league_event(event: LeagueEventCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not current_user.is_admin:
@@ -157,15 +172,32 @@ def auto_generate_fixtures(league_id: int, db: Session = Depends(get_db), curren
         db.refresh(fix)
     return list_fixtures(league_id, db)
 
+@router.get("/events/{league_id}/matches", response_model=List[LeagueMatchSchema])
+def list_league_matches(league_id: int, db: Session = Depends(get_db)):
+    # Join matches with fixtures to filter by league_id
+    matches = db.query(LeagueMatch).join(LeagueFixture).filter(LeagueFixture.league_id == league_id).all()
+    return matches
+
 @router.get("/events/{league_id}/fixtures", response_model=List[LeagueFixtureSchema])
 def list_fixtures(league_id: int, db: Session = Depends(get_db)):
     u1 = aliased(User)
     u2 = aliased(User)
-    results = db.query(LeagueFixture, u1.username.label("u1name"), u2.username.label("u2name")).join(u1, LeagueFixture.player1_id == u1.id).join(u2, LeagueFixture.player2_id == u2.id).filter(LeagueFixture.league_id == league_id).all()
+    # Join with LeagueMatch to get the match_id if it exists
+    results = db.query(
+        LeagueFixture,
+        u1.username.label("u1name"),
+        u2.username.label("u2name"),
+        LeagueMatch.id.label("match_id")
+    ).join(u1, LeagueFixture.player1_id == u1.id)\
+     .join(u2, LeagueFixture.player2_id == u2.id)\
+     .outerjoin(LeagueMatch, LeagueMatch.fixture_id == LeagueFixture.id)\
+     .filter(LeagueFixture.league_id == league_id).all()
+
     fixtures = []
-    for f, un1, un2 in results:
+    for f, un1, un2, m_id in results:
         f.player1_username = un1
         f.player2_username = un2
+        f.match_id = m_id
         fixtures.append(f)
     return fixtures
 
@@ -239,16 +271,123 @@ def list_league_audit(league_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=403, detail="Admin access required")
     return db.query(LeagueAdminAudit).filter_by(league_id=league_id).order_by(LeagueAdminAudit.created_at.desc()).all()
 
-@router.post("/events/{league_id}/group/progress")
-def progress_group_stage(league_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.post("/events/{league_id}/fixtures/{match_id}/force-complete")
+def force_complete_league_match(
+    league_id: int,
+    match_id: int,
+    winner_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
-    # Placeholder logic
-    return {"message": "Group stage progress protocol initialized (Stub)"}
 
-@router.post("/events/{league_id}/finals/generate")
-def generate_finals_matrix(league_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from app.services.league_service import force_complete_match
+    match = force_complete_match(db, match_id, winner_id)
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    # Audit log
+    audit = LeagueAdminAudit(
+        admin_id=current_user.id,
+        action="FORCE_COMPLETE_MATCH",
+        league_id=league_id,
+        details=f"Match {match_id} force closed. Winner: {winner_id}",
+        created_at=datetime.utcnow()
+    )
+    db.add(audit)
+    db.commit()
+
+    return {"message": "Match force completed", "match_id": match_id}
+
+@router.post("/events/{league_id}/group/generate")
+def generate_group_stage(
+    league_id: int,
+    groups_count: int = 4,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
-    # Placeholder logic
-    return {"message": "Finals matrix generation protocol initialized (Stub)"}
+
+    participants = db.query(LeagueParticipant).filter_by(league_id=league_id, status="active").all()
+    if not participants:
+        raise HTTPException(status_code=400, detail="No active participants")
+
+    user_ids = [p.user_id for p in participants]
+    random.shuffle(user_ids)
+
+    # Divide into groups
+    groups = [[] for _ in range(groups_count)]
+    for i, uid in enumerate(user_ids):
+        groups[i % groups_count].append(uid)
+
+    fixtures_created = 0
+    for g_idx, members in enumerate(groups):
+        group_name = chr(65 + g_idx) # A, B, C, D...
+        # Round robin within group
+        for i in range(len(members)):
+            for j in range(i + 1, len(members)):
+                p1, p2 = members[i], members[j]
+                fix = LeagueFixture(
+                    league_id=league_id,
+                    round=1,
+                    player1_id=p1,
+                    player2_id=p2,
+                    stage="group",
+                    group_name=group_name
+                )
+                db.add(fix)
+                db.flush()
+                match = LeagueMatch(fixture_id=fix.id)
+                db.add(match)
+                fixtures_created += 1
+
+    db.commit()
+    return {"message": f"Generated {fixtures_created} group stage fixtures across {groups_count} groups"}
+
+@router.post("/events/{league_id}/knockout/generate")
+def generate_knockout_stage(
+    league_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # Take top 8 players overall from standings as default knockout qualifier
+    top_standings = db.query(LeagueStanding).filter_by(league_id=league_id).order_by(LeagueStanding.points.desc()).limit(8).all()
+    qualified_ids = [s.user_id for s in top_standings]
+
+    if len(qualified_ids) < 2:
+        # Fallback to active participants if no standings yet
+        participants = db.query(LeagueParticipant).filter_by(league_id=league_id, status="active").all()
+        qualified_ids = [p.user_id for p in participants]
+        random.shuffle(qualified_ids)
+
+    if len(qualified_ids) < 2:
+        raise HTTPException(status_code=400, detail="Not enough participants for knockout")
+
+    # Determine next round number
+    last_fix = db.query(LeagueFixture).filter_by(league_id=league_id).order_by(LeagueFixture.round.desc()).first()
+    next_round = (last_fix.round + 1) if last_fix else 1
+
+    fixtures_created = 0
+    for i in range(0, len(qualified_ids) - 1, 2):
+        fix = LeagueFixture(
+            league_id=league_id,
+            round=next_round,
+            player1_id=qualified_ids[i],
+            player2_id=qualified_ids[i+1],
+            stage="knockout"
+        )
+        db.add(fix)
+        db.flush()
+        match = LeagueMatch(fixture_id=fix.id)
+        db.add(match)
+        fixtures_created += 1
+
+    db.commit()
+    return {"message": f"Generated {fixtures_created} knockout fixtures for Round {next_round}"}
+
+

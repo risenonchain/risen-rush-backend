@@ -25,7 +25,8 @@ from app.models.redemption_request import RedemptionRequest  # noqa
 from app.models.league import (  # noqa
     LeagueEvent, LeagueRegistration, LeagueParticipant,
     LeagueFixture, LeagueMatch, LeagueStanding,
-    LeagueTopScore, LeagueDeepestRunner, LeagueAdminAudit
+    LeagueTopScore, LeagueDeepestRunner, LeagueAdminAudit,
+    LeagueLiveAccess
 )
 
 print("DATABASE_URL IN USE:", settings.database_url)

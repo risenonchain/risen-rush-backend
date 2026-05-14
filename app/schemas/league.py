@@ -73,6 +73,7 @@ class LeagueFixture(LeagueFixtureBase):
     result_submitted: Optional[bool] = False
     player1_username: Optional[str] = None
     player2_username: Optional[str] = None
+    match_id: Optional[int] = None
     class Config:
         orm_mode = True
 
