@@ -6,6 +6,8 @@ class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=30)
     password: str = Field(min_length=6, max_length=72)
     referral_code: str | None = Field(default=None, max_length=64)
+    agreed_to_terms: bool = Field(default=False)
+    marketing_consent: bool = Field(default=False)
 
 
 class ForgotPasswordRequest(BaseModel):

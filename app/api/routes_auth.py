@@ -102,6 +102,14 @@ def register(
 ):
     verify_turnstile_or_raise(request, "registration")
 
+    if payload.username is not None:
+        normalized_username = payload.username.strip()
+        if len(normalized_username) < 3:
+            raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+
+    if not payload.agreed_to_terms:
+        raise HTTPException(status_code=400, detail="You must agree to the Terms and Privacy Policy")
+
     existing_email = db.query(User).filter(User.email == payload.email).first()
     if existing_email:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -130,6 +138,8 @@ def register(
             referred_by_user_id=referred_by_user_id,
             vault_trials=0,
             is_admin=False,
+            agreed_to_terms=payload.agreed_to_terms,
+            marketing_consent=payload.marketing_consent,
         )
         db.add(new_user)
         db.flush()

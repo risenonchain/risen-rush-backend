@@ -5,15 +5,20 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.game_session import GameSession
 from app.models.user import User
+from app.models.season import Season
 
 router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
 
 LEADERBOARD_LIMIT = 20
 
+def get_active_season_start(db: Session):
+    active_season = db.query(Season).filter(Season.is_active == True).first()
+    return active_season.start_at if active_season else None
 
 @router.get("/top-score")
 def get_top_score_leaderboard(db: Session = Depends(get_db)):
-    results = (
+    start_at = get_active_season_start(db)
+    query = (
         db.query(
             User.id.label("user_id"),
             User.username.label("username"),
@@ -24,8 +29,15 @@ def get_top_score_leaderboard(db: Session = Depends(get_db)):
         .filter(
             GameSession.status == "finished",
             GameSession.final_score.isnot(None),
+            GameSession.is_league_game == False,
         )
-        .group_by(User.id, User.username)
+    )
+
+    if start_at:
+        query = query.filter(GameSession.ended_at >= start_at)
+
+    results = (
+        query.group_by(User.id, User.username)
         .order_by(
             func.max(GameSession.final_score).desc(),
             func.max(GameSession.level_reached).desc(),
@@ -52,7 +64,8 @@ def get_top_score_leaderboard(db: Session = Depends(get_db)):
 
 @router.get("/top-level")
 def get_top_level_leaderboard(db: Session = Depends(get_db)):
-    results = (
+    start_at = get_active_season_start(db)
+    query = (
         db.query(
             User.id.label("user_id"),
             User.username.label("username"),
@@ -63,8 +76,15 @@ def get_top_level_leaderboard(db: Session = Depends(get_db)):
         .filter(
             GameSession.status == "finished",
             GameSession.level_reached.isnot(None),
+            GameSession.is_league_game == False,
         )
-        .group_by(User.id, User.username)
+    )
+
+    if start_at:
+        query = query.filter(GameSession.ended_at >= start_at)
+
+    results = (
+        query.group_by(User.id, User.username)
         .order_by(
             func.max(GameSession.level_reached).desc(),
             func.max(GameSession.final_score).desc(),

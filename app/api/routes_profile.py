@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from app.api.routes_auth import get_current_user
 from app.core.security import get_password_hash, verify_password
@@ -214,6 +214,41 @@ def create_redemption_request(
         created_at=request_row.created_at.isoformat(),
         reviewed_at=request_row.reviewed_at.isoformat() if request_row.reviewed_at else None,
     )
+
+
+@router.get("/history")
+def get_user_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Group by month and get max score/level for last 12 months
+    # Using SQLite strftime since it's the current DB
+    results = (
+        db.query(
+            func.strftime('%Y-%m', GameSession.ended_at).label('month'),
+            func.max(GameSession.final_score).label('best_score'),
+            func.max(GameSession.level_reached).label('best_level')
+        )
+        .filter(
+            GameSession.user_id == current_user.id,
+            GameSession.status == "finished",
+            GameSession.ended_at.isnot(None),
+            GameSession.is_league_game == False
+        )
+        .group_by(text('month'))
+        .order_by(text('month DESC'))
+        .limit(12)
+        .all()
+    )
+
+    return [
+        {
+            "month": row.month,
+            "best_score": row.best_score,
+            "best_level": row.best_level
+        }
+        for row in results
+    ]
 
 
 @router.get("/redemptions", response_model=list[RedemptionRequestResponse])

@@ -1,12 +1,19 @@
 from datetime import datetime
+import io
+import csv
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.api.routes_auth import get_current_user
 from app.db.database import get_db
 from app.models.redemption_request import RedemptionRequest
 from app.models.user import User
+from app.models.game_session import GameSession
+from app.models.season import Season
+from app.models.point_wallet import PointWallet
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -79,3 +86,78 @@ def update_redemption_request_status(
         "status": row.status,
         "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
     }
+
+
+@router.post("/seasons/reset")
+def reset_season(
+    name: str = Body(..., embed=True),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    # Deactivate current active seasons
+    db.query(Season).filter(Season.is_active == True).update({"is_active": False, "end_at": datetime.utcnow()})
+
+    # Create new season
+    new_season = Season(name=name, is_active=True, start_at=datetime.utcnow())
+    db.add(new_season)
+    db.commit()
+    db.refresh(new_season)
+
+    return {"message": f"Season '{name}' started", "season_id": new_season.id}
+
+
+@router.get("/analytics/summary")
+def get_analytics_summary(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    total_users = db.query(User).count()
+    total_sessions = db.query(GameSession).count()
+    premium_users = db.query(User).filter(User.is_premium == True).count()
+
+    # Get total points in circulation
+    total_points = db.query(func.sum(PointWallet.available_points)).scalar() or 0
+
+    return {
+        "total_users": total_users,
+        "total_sessions": total_sessions,
+        "premium_users": premium_users,
+        "total_points_in_vaults": int(total_points),
+    }
+
+
+@router.get("/analytics/export")
+def export_users_csv(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    users = db.query(User).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Header
+    writer.writerow(["ID", "Username", "Email", "Wallet Address", "Is Premium", "Best Score", "Best Level", "Total Points Earned", "Available Points", "Joined At"])
+
+    for u in users:
+        wallet = db.query(PointWallet).filter(PointWallet.user_id == u.id).first()
+        writer.writerow([
+            u.id,
+            u.username,
+            u.email,
+            u.wallet_address or "",
+            u.is_premium,
+            u.best_score,
+            u.best_level,
+            wallet.total_points_earned if wallet else 0,
+            wallet.available_points if wallet else 0,
+            u.created_at.isoformat() if hasattr(u, 'created_at') and u.created_at else ""
+        ])
+
+    output.seek(0)
+
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode()),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=risen_users_export.csv"}
+    )

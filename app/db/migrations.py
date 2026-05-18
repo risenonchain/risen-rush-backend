@@ -57,6 +57,19 @@ def run_migrations():
             conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
         except Exception: pass
 
+        # Privacy and Marketing Consent
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN agreed_to_terms BOOLEAN DEFAULT 0"))
+        except Exception: pass
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN marketing_consent BOOLEAN DEFAULT 0"))
+        except Exception: pass
+
+        # Mark all existing users as agreed
+        try:
+            conn.execute(text("UPDATE users SET agreed_to_terms = 1, marketing_consent = 1"))
+        except Exception: pass
+
         # Create news table if not exists
         try:
             conn.execute(text('''
@@ -119,5 +132,23 @@ def run_migrations():
         try:
             conn.execute(text("ALTER TABLE league_participants ADD COLUMN status VARCHAR DEFAULT 'active'"))
         except Exception: pass
+
+        # Create seasons table
+        try:
+            conn.execute(text('''
+                CREATE TABLE IF NOT EXISTS seasons (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(100) NOT NULL,
+                    start_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    end_at DATETIME,
+                    is_active BOOLEAN DEFAULT 1
+                )
+            '''))
+            # Check if there is an active season, if not create one
+            res = conn.execute(text("SELECT COUNT(*) FROM seasons WHERE is_active = 1")).fetchone()
+            if res[0] == 0:
+                conn.execute(text("INSERT INTO seasons (name, is_active) VALUES ('Genesis Season', 1)"))
+        except Exception:
+            pass
 
         conn.commit()
