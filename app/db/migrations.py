@@ -1,3 +1,4 @@
+from datetime import datetime
 from sqlalchemy import text
 from app.db.database import engine
 
@@ -111,6 +112,9 @@ def run_migrations():
         try:
             conn.execute(text("ALTER TABLE league_events ADD COLUMN live_fee_usd INTEGER DEFAULT 30"))
         except Exception: pass
+        try:
+            conn.execute(text("ALTER TABLE league_events ADD COLUMN current_stage VARCHAR DEFAULT 'registration'"))
+        except Exception: pass
 
         # Update game_sessions for league support
         try:
@@ -135,6 +139,10 @@ def run_migrations():
 
         # Create seasons table
         try:
+            # Check if table exists
+            conn.execute(text("SELECT 1 FROM seasons LIMIT 1"))
+        except Exception:
+            # Table doesn't exist, create it
             conn.execute(text('''
                 CREATE TABLE IF NOT EXISTS seasons (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,10 +152,13 @@ def run_migrations():
                     is_active BOOLEAN DEFAULT 1
                 )
             '''))
+
+        try:
             # Check if there is an active season, if not create one
             res = conn.execute(text("SELECT COUNT(*) FROM seasons WHERE is_active = 1")).fetchone()
             if res[0] == 0:
-                conn.execute(text("INSERT INTO seasons (name, is_active) VALUES ('Genesis Season', 1)"))
+                # Force the Genesis season to start NOW to hide old data
+                conn.execute(text("INSERT INTO seasons (name, is_active, start_at) VALUES ('Genesis Season', 1, :now)"), {"now": datetime.utcnow()})
         except Exception:
             pass
 

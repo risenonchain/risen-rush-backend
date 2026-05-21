@@ -106,6 +106,30 @@ def reset_season(
     return {"message": f"Season '{name}' started", "season_id": new_season.id}
 
 
+@router.post("/leaderboard/hard-reset")
+def hard_reset_leaderboard(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    # 1. Delete all non-league game sessions
+    db.query(GameSession).filter(GameSession.is_league_game == False).delete()
+
+    # 2. Reset user best scores/levels
+    db.query(User).update({User.best_score: 0, User.best_level: 1})
+
+    # 3. Start a fresh season to ensure start_at is NOW
+    db.query(Season).filter(Season.is_active == True).update({"is_active": False, "end_at": datetime.utcnow()})
+    new_season = Season(
+        name="Hard Reset " + datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
+        is_active=True,
+        start_at=datetime.utcnow()
+    )
+    db.add(new_season)
+
+    db.commit()
+    return {"message": "Leaderboard wiped clean and personal bests reset."}
+
+
 @router.get("/analytics/summary")
 def get_analytics_summary(
     current_admin: User = Depends(require_admin),
@@ -115,6 +139,13 @@ def get_analytics_summary(
     total_sessions = db.query(GameSession).count()
     premium_users = db.query(User).filter(User.is_premium == True).count()
 
+    today = datetime.utcnow().date()
+    users_today = db.query(User).filter(func.date(User.created_at) == today).count()
+    sessions_today = db.query(GameSession).filter(func.date(GameSession.started_at) == today).count()
+
+    # Get active season
+    active_season = db.query(Season).filter(Season.is_active == True).first()
+
     # Get total points in circulation
     total_points = db.query(func.sum(PointWallet.available_points)).scalar() or 0
 
@@ -123,6 +154,12 @@ def get_analytics_summary(
         "total_sessions": total_sessions,
         "premium_users": premium_users,
         "total_points_in_vaults": int(total_points),
+        "users_today": users_today,
+        "sessions_today": sessions_today,
+        "active_season": {
+            "name": active_season.name if active_season else "None",
+            "start_at": active_season.start_at.isoformat() if active_season else None
+        }
     }
 
 
@@ -132,15 +169,30 @@ def export_users_csv(
     db: Session = Depends(get_db),
 ):
     users = db.query(User).all()
+    today = datetime.utcnow().date()
 
     output = io.StringIO()
     writer = csv.writer(output)
 
     # Header
-    writer.writerow(["ID", "Username", "Email", "Wallet Address", "Is Premium", "Best Score", "Best Level", "Total Points Earned", "Available Points", "Joined At"])
+    writer.writerow([
+        "ID", "Username", "Email", "Wallet Address", "Is Premium",
+        "Best Score", "Best Level", "Total Points Earned", "Available Points",
+        "Joined At", "Registered Today", "Sessions Today"
+    ])
 
     for u in users:
         wallet = db.query(PointWallet).filter(PointWallet.user_id == u.id).first()
+
+        # Check if registered today
+        is_today = u.created_at.date() == today if hasattr(u, 'created_at') and u.created_at else False
+
+        # Count sessions today
+        sessions_today = db.query(GameSession).filter(
+            GameSession.user_id == u.id,
+            func.date(GameSession.started_at) == today
+        ).count()
+
         writer.writerow([
             u.id,
             u.username,
@@ -151,13 +203,16 @@ def export_users_csv(
             u.best_level,
             wallet.total_points_earned if wallet else 0,
             wallet.available_points if wallet else 0,
-            u.created_at.isoformat() if hasattr(u, 'created_at') and u.created_at else ""
+            u.created_at.isoformat() if hasattr(u, 'created_at') and u.created_at else "",
+            "YES" if is_today else "NO",
+            sessions_today
         ])
 
     output.seek(0)
 
+    filename = f"risen_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
     return StreamingResponse(
         io.BytesIO(output.getvalue().encode()),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=risen_users_export.csv"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )

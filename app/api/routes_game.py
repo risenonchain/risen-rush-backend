@@ -103,9 +103,16 @@ def finish_session(
     session.duration_seconds = payload.duration_seconds
     session.level_reached = payload.level_reached
     session.lives_remaining = payload.lives_remaining
-    session.ended_at = datetime.now(timezone.utc)
+    session.ended_at = datetime.utcnow()
     session.status = "finished"
     db.add(session)
+
+    # Update User Personal Bests
+    if payload.final_score > (current_user.best_score or 0):
+        current_user.best_score = payload.final_score
+    if payload.level_reached > (current_user.best_level or 1):
+        current_user.best_level = payload.level_reached
+    db.add(current_user)
 
     wallet = db.query(PointWallet).filter(PointWallet.user_id == current_user.id).first()
     if not wallet:
@@ -178,9 +185,16 @@ def finish_league_session(
     session.duration_seconds = payload.duration_seconds
     session.level_reached = payload.level_reached
     session.lives_remaining = payload.lives_remaining
-    session.ended_at = datetime.now(timezone.utc)
+    session.ended_at = datetime.utcnow()
     session.status = "finished"
     db.add(session)
+
+    # Update User Personal Bests
+    if payload.final_score > (current_user.best_score or 0):
+        current_user.best_score = payload.final_score
+    if payload.level_reached > (current_user.best_level or 1):
+        current_user.best_level = payload.level_reached
+    db.add(current_user)
 
     if session.is_league_game and session.league_match_id:
         match = db.query(LeagueMatch).filter_by(id=session.league_match_id).first()

@@ -310,6 +310,10 @@ def generate_group_stage(
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
 
+    event = db.query(LeagueEvent).filter_by(id=league_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="League event not found")
+
     participants = db.query(LeagueParticipant).filter_by(league_id=league_id, status="active").all()
     if not participants:
         raise HTTPException(status_code=400, detail="No active participants")
@@ -318,9 +322,10 @@ def generate_group_stage(
     random.shuffle(user_ids)
 
     # Divide into groups
-    groups = [[] for _ in range(groups_count)]
+    actual_groups_count = min(groups_count, len(user_ids))
+    groups = [[] for _ in range(actual_groups_count)]
     for i, uid in enumerate(user_ids):
-        groups[i % groups_count].append(uid)
+        groups[i % actual_groups_count].append(uid)
 
     fixtures_created = 0
     for g_idx, members in enumerate(groups):
@@ -343,11 +348,12 @@ def generate_group_stage(
                 db.add(match)
                 fixtures_created += 1
 
+    event.current_stage = "groups"
     db.commit()
-    return {"message": f"Generated {fixtures_created} group stage fixtures across {groups_count} groups"}
+    return {"message": f"Generated {fixtures_created} group stage fixtures across {actual_groups_count} groups"}
 
-@router.post("/events/{league_id}/knockout/generate")
-def generate_knockout_stage(
+@router.post("/events/{league_id}/finish")
+def finish_league(
     league_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -355,39 +361,14 @@ def generate_knockout_stage(
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    # Take top 8 players overall from standings as default knockout qualifier
-    top_standings = db.query(LeagueStanding).filter_by(league_id=league_id).order_by(LeagueStanding.points.desc()).limit(8).all()
-    qualified_ids = [s.user_id for s in top_standings]
+    event = db.query(LeagueEvent).filter_by(id=league_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="League event not found")
 
-    if len(qualified_ids) < 2:
-        # Fallback to active participants if no standings yet
-        participants = db.query(LeagueParticipant).filter_by(league_id=league_id, status="active").all()
-        qualified_ids = [p.user_id for p in participants]
-        random.shuffle(qualified_ids)
-
-    if len(qualified_ids) < 2:
-        raise HTTPException(status_code=400, detail="Not enough participants for knockout")
-
-    # Determine next round number
-    last_fix = db.query(LeagueFixture).filter_by(league_id=league_id).order_by(LeagueFixture.round.desc()).first()
-    next_round = (last_fix.round + 1) if last_fix else 1
-
-    fixtures_created = 0
-    for i in range(0, len(qualified_ids) - 1, 2):
-        fix = LeagueFixture(
-            league_id=league_id,
-            round=next_round,
-            player1_id=qualified_ids[i],
-            player2_id=qualified_ids[i+1],
-            stage="knockout"
-        )
-        db.add(fix)
-        db.flush()
-        match = LeagueMatch(fixture_id=fix.id)
-        db.add(match)
-        fixtures_created += 1
-
+    event.current_stage = "finished"
+    event.is_active = False
     db.commit()
-    return {"message": f"Generated {fixtures_created} knockout fixtures for Round {next_round}"}
+
+    return {"message": "League event finished"}
 
 

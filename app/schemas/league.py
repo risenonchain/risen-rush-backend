@@ -10,6 +10,7 @@ class LeagueEventBase(BaseModel):
     is_active: Optional[bool] = False
     is_live_visible: Optional[bool] = False
     live_fee_usd: Optional[int] = 30
+    current_stage: Optional[str] = "registration"
 
 class LeagueEventCreate(LeagueEventBase):
     pass
@@ -18,6 +19,7 @@ class LeagueEventUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_live_visible: Optional[bool] = None
     live_fee_usd: Optional[int] = None
+    current_stage: Optional[str] = None
 
 class LeagueEvent(LeagueEventBase):
     id: int
@@ -74,6 +76,8 @@ class LeagueFixture(LeagueFixtureBase):
     player1_username: Optional[str] = None
     player2_username: Optional[str] = None
     match_id: Optional[int] = None
+    stage: Optional[str] = "group"
+    group_name: Optional[str] = None
     class Config:
         orm_mode = True
 

@@ -10,6 +10,7 @@ class LeagueEvent(Base):
     is_active = Column(Boolean, default=False)
     is_live_visible = Column(Boolean, default=False) # Admin toggle for live viewing
     live_fee_usd = Column(Integer, default=30) # Cents, e.g. 30 = $0.30
+    current_stage = Column(String(50), default="registration") # registration, groups, knockout, finished
     created_at = Column(DateTime)
 
 class LeagueLiveAccess(Base):
