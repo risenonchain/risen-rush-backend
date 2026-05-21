@@ -163,6 +163,62 @@ def get_analytics_summary(
     }
 
 
+@router.get("/analytics/users")
+def get_detailed_users(
+    search: str | None = None,
+    sort_by: str = "id",
+    order: str = "desc",
+    is_premium: bool | None = None,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    query = db.query(User, PointWallet).join(PointWallet, User.id == PointWallet.user_id)
+
+    if search:
+        query = query.filter(
+            (User.username.ilike(f"%{search}%")) | (User.email.ilike(f"%{search}%"))
+        )
+
+    if is_premium is not None:
+        query = query.filter(User.is_premium == is_premium)
+
+    # Sorting logic
+    sort_attr = getattr(User, sort_by, None)
+    if not sort_attr:
+        # Check PointWallet for sorting (e.g., points)
+        if sort_by == "available_points":
+            sort_attr = PointWallet.available_points
+        elif sort_by == "total_points_earned":
+            sort_attr = PointWallet.total_points_earned
+        else:
+            sort_attr = User.id
+
+    if order == "desc":
+        query = query.order_by(sort_attr.desc())
+    else:
+        query = query.order_by(sort_attr.asc())
+
+    results = query.limit(100).all()
+
+    today = datetime.utcnow().date()
+
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "is_premium": u.is_premium,
+            "best_score": u.best_score,
+            "best_level": u.best_level,
+            "available_points": w.available_points,
+            "total_points_earned": w.total_points_earned,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "is_today": u.created_at.date() == today if u.created_at else False,
+        }
+        for u, w in results
+    ]
+
+
 @router.get("/analytics/export")
 def export_users_csv(
     current_admin: User = Depends(require_admin),

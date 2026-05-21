@@ -71,16 +71,39 @@ def run_migrations():
             conn.execute(text("UPDATE users SET agreed_to_terms = 1, marketing_consent = 1"))
         except Exception: pass
 
+        # Create announcements table
+        try:
+            # Check if using postgres
+            is_postgres = "postgresql" in str(engine.url)
+
+            id_type = "SERIAL PRIMARY KEY" if is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
+            bool_true = "TRUE" if is_postgres else "1"
+
+            conn.execute(text(f'''
+                CREATE TABLE IF NOT EXISTS announcements (
+                    id {id_type},
+                    message TEXT NOT NULL,
+                    is_active BOOLEAN DEFAULT {bool_true},
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            '''))
+        except Exception:
+            pass
+
         # Create news table if not exists
         try:
-            conn.execute(text('''
+            is_postgres = "postgresql" in str(engine.url)
+            id_type = "SERIAL PRIMARY KEY" if is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
+            bool_true = "TRUE" if is_postgres else "1"
+
+            conn.execute(text(f'''
                 CREATE TABLE IF NOT EXISTS news (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {id_type},
                     title VARCHAR(200) NOT NULL,
                     summary VARCHAR(300) NOT NULL,
                     details TEXT NOT NULL,
                     url VARCHAR(300),
-                    is_active BOOLEAN DEFAULT 1,
+                    is_active BOOLEAN DEFAULT {bool_true},
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME
                 )
@@ -90,15 +113,20 @@ def run_migrations():
 
         # Create league_events table if not exists
         try:
-            conn.execute(text('''
+            is_postgres = "postgresql" in str(engine.url)
+            id_type = "SERIAL PRIMARY KEY" if is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
+            bool_false = "FALSE" if is_postgres else "0"
+
+            conn.execute(text(f'''
                 CREATE TABLE IF NOT EXISTS league_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {id_type},
                     name VARCHAR(100) NOT NULL,
                     start_date DATE NOT NULL,
                     end_date DATE NOT NULL,
-                    is_active BOOLEAN DEFAULT 0,
-                    is_live_visible BOOLEAN DEFAULT 0,
+                    is_active BOOLEAN DEFAULT {bool_false},
+                    is_live_visible BOOLEAN DEFAULT {bool_false},
                     live_fee_usd INTEGER DEFAULT 30,
+                    current_stage VARCHAR DEFAULT 'registration',
                     created_at DATETIME
                 )
             '''))
@@ -143,22 +171,27 @@ def run_migrations():
             conn.execute(text("SELECT 1 FROM seasons LIMIT 1"))
         except Exception:
             # Table doesn't exist, create it
-            conn.execute(text('''
+            is_postgres = "postgresql" in str(engine.url)
+            id_type = "SERIAL PRIMARY KEY" if is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
+            bool_true = "TRUE" if is_postgres else "1"
+
+            conn.execute(text(f'''
                 CREATE TABLE IF NOT EXISTS seasons (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {id_type},
                     name VARCHAR(100) NOT NULL,
                     start_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     end_at DATETIME,
-                    is_active BOOLEAN DEFAULT 1
+                    is_active BOOLEAN DEFAULT {bool_true}
                 )
             '''))
 
         try:
             # Check if there is an active season, if not create one
-            res = conn.execute(text("SELECT COUNT(*) FROM seasons WHERE is_active = 1")).fetchone()
+            res = conn.execute(text("SELECT COUNT(*) FROM seasons WHERE is_active = :val"), {"val": True if "postgresql" in str(engine.url) else 1}).fetchone()
             if res[0] == 0:
                 # Force the Genesis season to start NOW to hide old data
-                conn.execute(text("INSERT INTO seasons (name, is_active, start_at) VALUES ('Genesis Season', 1, :now)"), {"now": datetime.utcnow()})
+                bool_val = True if "postgresql" in str(engine.url) else 1
+                conn.execute(text("INSERT INTO seasons (name, is_active, start_at) VALUES ('Genesis Season', :is_active, :now)"), {"is_active": bool_val, "now": datetime.utcnow()})
         except Exception:
             pass
 

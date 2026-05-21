@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -58,6 +59,7 @@ class UserResponse(BaseModel):
     generated_avatar_url: str | None = None
     vault_trials: int = 0
     is_premium: bool = False
+    premium_expires_at: datetime | None = None
     is_admin: bool = False
 
     class Config:

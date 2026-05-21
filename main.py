@@ -12,6 +12,7 @@ from app.api.routes_news import router as news_router
 from app.api.routes_modal import router as modal_router
 from app.api.routes_ads import router as ads_router
 from app.api.routes_payments import router as payments_router
+from app.api.routes_announcement import router as announcement_router
 from app.db.database import Base, engine
 from app.db.migrations import run_migrations
 
@@ -108,6 +109,7 @@ app.include_router(admin_auth_router)
 app.include_router(modal_router)
 app.include_router(ads_router)
 app.include_router(payments_router)
+app.include_router(announcement_router)
 
 
 @app.get("/")
