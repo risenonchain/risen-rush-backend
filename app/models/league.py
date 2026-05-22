@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, DateTime, Date, UniqueConstraint, Text
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, DateTime, Date, UniqueConstraint, Text, func
 from app.db.base import Base
 
 class LeagueEvent(Base):
@@ -100,3 +100,14 @@ class LeagueAdminAudit(Base):
     league_id = Column(Integer, ForeignKey("league_events.id"))
     details = Column(Text)
     created_at = Column(DateTime)
+
+class LeagueChallenge(Base):
+    __tablename__ = "league_challenges"
+    id = Column(Integer, primary_key=True)
+    league_id = Column(Integer, ForeignKey("league_events.id"))
+    challenger_id = Column(Integer, ForeignKey("users.id"))
+    challenged_id = Column(Integer, ForeignKey("users.id"))
+    scheduled_at = Column(DateTime, nullable=False)
+    status = Column(String(20), default='pending') # pending, accepted, rejected, cancelled, completed
+    created_at = Column(DateTime, server_default=func.now())
+    expires_at = Column(DateTime)

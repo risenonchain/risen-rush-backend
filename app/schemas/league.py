@@ -168,3 +168,24 @@ class LeagueAdminAudit(LeagueAdminAuditBase):
     created_at: Optional[datetime]
     class Config:
         orm_mode = True
+
+# --- League Challenges (P2P) ---
+class LeagueChallengeBase(BaseModel):
+    league_id: int
+    challenged_id: int
+    scheduled_at: datetime
+
+class LeagueChallengeCreate(LeagueChallengeBase):
+    pass
+
+class LeagueChallengeOut(LeagueChallengeBase):
+    id: int
+    challenger_id: int
+    challenger_username: Optional[str] = None
+    challenged_username: Optional[str] = None
+    status: str
+    created_at: datetime
+    expires_at: datetime
+
+    class Config:
+        orm_mode = True

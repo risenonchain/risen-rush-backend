@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.orm import Session, aliased
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
 
 from app.db.database import get_db
@@ -9,7 +9,7 @@ from app.models.league import (
     LeagueEvent, LeagueRegistration, LeagueParticipant,
     LeagueFixture, LeagueMatch, LeagueStanding,
     LeagueTopScore, LeagueDeepestRunner, LeagueAdminAudit,
-    LeagueLiveAccess
+    LeagueLiveAccess, LeagueChallenge
 )
 from app.models.user import User
 from app.api.routes_auth import get_current_user
@@ -29,6 +29,8 @@ from app.schemas.league import (
     LeagueTopScore as LeagueTopScoreSchema,
     LeagueDeepestRunner as LeagueDeepestRunnerSchema,
     LeagueAdminAudit as LeagueAdminAuditSchema,
+    LeagueChallengeCreate,
+    LeagueChallengeOut
 )
 
 router = APIRouter(prefix="/league", tags=["League"])
@@ -88,6 +90,8 @@ def toggle_league_event_active(
             event.is_live_visible = update_data.is_live_visible
         if update_data.live_fee_usd is not None:
             event.live_fee_usd = update_data.live_fee_usd
+        if update_data.current_stage is not None:
+            event.current_stage = update_data.current_stage
 
     db.commit()
     db.refresh(event)
@@ -352,6 +356,56 @@ def generate_group_stage(
     db.commit()
     return {"message": f"Generated {fixtures_created} group stage fixtures across {actual_groups_count} groups"}
 
+@router.post("/events/{league_id}/knockout/generate")
+def generate_knockout_stage(
+    league_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    event = db.query(LeagueEvent).filter_by(id=league_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="League event not found")
+
+    # Take top 8 players overall from standings as default knockout qualifier
+    top_standings = db.query(LeagueStanding).filter_by(league_id=league_id).order_by(LeagueStanding.points.desc()).limit(8).all()
+    qualified_ids = [s.user_id for s in top_standings]
+
+    if len(qualified_ids) < 2:
+        # Fallback to active participants if no standings yet
+        participants = db.query(LeagueParticipant).filter_by(league_id=league_id, status="active").all()
+        qualified_ids = [p.user_id for p in participants]
+        random.shuffle(qualified_ids)
+
+    if len(qualified_ids) < 2:
+        raise HTTPException(status_code=400, detail="Not enough participants for knockout")
+
+    # Determine next round number
+    last_fix = db.query(LeagueFixture).filter_by(league_id=league_id).order_by(LeagueFixture.round.desc()).first()
+    next_round = (last_fix.round + 1) if last_fix else 1
+
+    fixtures_created = 0
+    # Pair them up
+    for i in range(0, len(qualified_ids) - 1, 2):
+        fix = LeagueFixture(
+            league_id=league_id,
+            round=next_round,
+            player1_id=qualified_ids[i],
+            player2_id=qualified_ids[i+1],
+            stage="knockout"
+        )
+        db.add(fix)
+        db.flush()
+        match = LeagueMatch(fixture_id=fix.id)
+        db.add(match)
+        fixtures_created += 1
+
+    event.current_stage = "knockout"
+    db.commit()
+    return {"message": f"Generated {fixtures_created} knockout fixtures for Round {next_round}"}
+
 @router.post("/events/{league_id}/finish")
 def finish_league(
     league_id: int,
@@ -371,4 +425,66 @@ def finish_league(
 
     return {"message": "League event finished"}
 
+# --- CHALLENGES (P2P) ---
 
+@router.get("/challenges/pending", response_model=List[LeagueChallengeOut])
+def get_pending_challenges(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Auto-cancel expired
+    now = datetime.utcnow()
+    db.query(LeagueChallenge).filter(LeagueChallenge.status == 'pending', LeagueChallenge.expires_at < now).update({"status": "cancelled"})
+    db.commit()
+
+    results = db.query(LeagueChallenge, User.username).join(User, LeagueChallenge.challenger_id == User.id)\
+                .filter(LeagueChallenge.challenged_id == current_user.id, LeagueChallenge.status == 'pending').all()
+
+    out = []
+    for c, uname in results:
+        o = LeagueChallengeOut.from_orm(c)
+        o.challenger_username = uname
+        out.append(o)
+    return out
+
+@router.post("/challenges/send", response_model=LeagueChallengeOut)
+def send_challenge(payload: LeagueChallengeCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.is_premium:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Prime protocol required for P2P challenges")
+
+    event = db.query(LeagueEvent).filter_by(id=payload.league_id).first()
+    if not event or event.current_stage != 'registration':
+        raise HTTPException(status_code=400, detail="Challenges only available during registration stage")
+
+    # Check if challenged user exists
+    challenged = db.query(User).filter_by(id=payload.challenged_id).first()
+    if not challenged:
+        raise HTTPException(status_code=404, detail="Opponent node not found")
+
+    challenge = LeagueChallenge(
+        league_id=payload.league_id,
+        challenger_id=current_user.id,
+        challenged_id=payload.challenged_id,
+        scheduled_at=payload.scheduled_at,
+        status='pending',
+        expires_at=datetime.utcnow() + timedelta(hours=48)
+    )
+    db.add(challenge)
+    db.commit()
+    db.refresh(challenge)
+    return challenge
+
+@router.patch("/challenges/{challenge_id}/respond")
+def respond_to_challenge(challenge_id: int, action: str = Body(..., embed=True), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    challenge = db.query(LeagueChallenge).filter_by(id=challenge_id, challenged_id=current_user.id).first()
+    if not challenge:
+        raise HTTPException(status_code=404, detail="Challenge record not found")
+
+    if action == "accept":
+        challenge.status = "accepted"
+        # Create a fixture/match for them?
+        # For now, just mark accepted. Real tournament logic might need a fixture.
+    elif action == "reject":
+        challenge.status = "rejected"
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action")
+
+    db.commit()
+    return {"status": challenge.status}

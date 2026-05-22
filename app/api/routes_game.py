@@ -234,3 +234,14 @@ def get_wallet(current_user=Depends(get_current_user), db: Session = Depends(get
         claimed_points=wallet.claimed_points,
         vault_trials=current_user.vault_trials or 0,
     )
+
+
+@router.get("/players")
+def list_available_players(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    # List other players for P2P challenges (Prime only feature)
+    if not current_user.is_premium:
+        raise HTTPException(status_code=403, detail="Prime protocol required")
+
+    # Return basic info of other users
+    users = db.query(User).filter(User.id != current_user.id).limit(50).all()
+    return [{"id": u.id, "username": u.username, "is_premium": u.is_premium} for u in users]
