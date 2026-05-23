@@ -304,6 +304,19 @@ def force_complete_league_match(
 
     return {"message": "Match force completed", "match_id": match_id}
 
+@router.post("/events/{league_id}/cleanup-overdue")
+def cleanup_league_overdue(
+    league_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    from app.services.league_service import cleanup_overdue_matches
+    results = cleanup_overdue_matches(db, league_id)
+    return {"message": f"Cleanup complete: {len(results)} matches resolved.", "details": results}
+
 @router.post("/events/{league_id}/group/generate")
 def generate_group_stage(
     league_id: int,
@@ -427,13 +440,38 @@ def finish_league(
 
 # --- CHALLENGES (P2P) ---
 
-@router.get("/challenges/pending", response_model=List[LeagueChallengeOut])
-def get_pending_challenges(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.get("/challenges/my", response_model=List[LeagueChallengeOut])
+def get_my_challenges(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # Auto-cancel expired
     now = datetime.utcnow()
     db.query(LeagueChallenge).filter(LeagueChallenge.status == 'pending', LeagueChallenge.expires_at < now).update({"status": "cancelled"})
     db.commit()
 
+    # Get challenges where user is either challenger or challenged
+    results = db.query(LeagueChallenge, User.username.label("other_username"))\
+                .join(User, (User.id == LeagueChallenge.challenger_id) | (User.id == LeagueChallenge.challenged_id))\
+                .filter(
+                    ((LeagueChallenge.challenger_id == current_user.id) | (LeagueChallenge.challenged_id == current_user.id)),
+                    User.id != current_user.id,
+                    LeagueChallenge.status.in_(['pending', 'accepted'])
+                ).all()
+
+    out = []
+    for c, other_uname in results:
+        o = LeagueChallengeOut.from_orm(c)
+        if c.challenger_id == current_user.id:
+            o.challenger_username = current_user.username
+            o.challenged_username = other_uname
+        else:
+            o.challenger_username = other_uname
+            o.challenged_username = current_user.username
+        out.append(o)
+    return out
+
+
+@router.get("/challenges/pending", response_model=List[LeagueChallengeOut])
+def get_pending_challenges(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Simple endpoint for lobby notifications
     results = db.query(LeagueChallenge, User.username).join(User, LeagueChallenge.challenger_id == User.id)\
                 .filter(LeagueChallenge.challenged_id == current_user.id, LeagueChallenge.status == 'pending').all()
 

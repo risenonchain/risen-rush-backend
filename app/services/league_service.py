@@ -104,3 +104,42 @@ def force_complete_match(db: Session, match_id: int, winner_id: int = None):
     db.commit()
     return match
 
+def cleanup_overdue_matches(db: Session, league_id: int):
+    """
+    Auto-resolve matches where one player started but the other didn't within 10 mins.
+    Also handles matches scheduled but never started (if needed).
+    """
+    from datetime import timedelta
+    cutoff = datetime.utcnow() - timedelta(minutes=10)
+
+    overdue_fixtures = db.query(LeagueFixture).filter(
+        LeagueFixture.league_id == league_id,
+        LeagueFixture.result_submitted == False,
+        LeagueFixture.first_start_at < cutoff
+    ).all()
+
+    results = []
+    for fixture in overdue_fixtures:
+        match = db.query(LeagueMatch).filter_by(fixture_id=fixture.id).first()
+        if not match: continue
+
+        # Award 3-0 win to the player who played
+        if match.player1_score is not None and match.player2_score is None:
+            # Player 1 wins by default
+            match.player1_score = max(match.player1_score, 3000) # Ensure a decent score
+            match.player2_score = 0
+            force_complete_match(db, match.id, fixture.player1_id)
+            results.append(f"Fixture {fixture.id}: P1 won by default")
+        elif match.player2_score is not None and match.player1_score is None:
+            # Player 2 wins by default
+            match.player1_score = 0
+            match.player2_score = max(match.player2_score, 3000)
+            force_complete_match(db, match.id, fixture.player2_id)
+            results.append(f"Fixture {fixture.id}: P2 won by default")
+        else:
+            # Both played but somehow it's not marked? Or neither played.
+            # If neither played and it's past schedule, maybe draw 0-0?
+            pass
+
+    return results
+

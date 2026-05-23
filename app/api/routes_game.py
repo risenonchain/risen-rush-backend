@@ -147,11 +147,20 @@ def start_league_session(
         raise HTTPException(status_code=403, detail="Not eligible for league match")
 
     token = secrets.token_hex(16)
+
+    # Determine lives based on stage: 2 for groups, 1 for knockout/finals
+    league_lives = 2 if fixture.stage == "group" else 1
+
+    # Record first start time if not already set
+    if not fixture.first_start_at:
+        fixture.first_start_at = datetime.utcnow()
+        db.add(fixture)
+
     session = GameSession(
         user_id=current_user.id,
         session_token=token,
         status="active",
-        lives_remaining=1,
+        lives_remaining=league_lives,
         is_league_game=True,
         league_match_id=match_id,
     )
@@ -164,8 +173,53 @@ def start_league_session(
         trials_remaining=0,
         daily_trials_remaining=0,
         vault_trials_remaining=0,
-        starting_lives=1,
+        starting_lives=league_lives,
         trial_source="league",
+    )
+
+
+@router.post("/league/challenge/{challenge_id}/start", response_model=StartSessionResponse)
+def start_p2p_session(
+    challenge_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    challenge = db.query(LeagueChallenge).filter_by(id=challenge_id).first()
+    if not challenge:
+        raise HTTPException(status_code=404, detail="Challenge not found")
+
+    if challenge.status != "accepted":
+        raise HTTPException(status_code=400, detail="Challenge must be accepted first")
+
+    if current_user.id not in [challenge.challenger_id, challenge.challenged_id]:
+        raise HTTPException(status_code=403, detail="Not a participant in this challenge")
+
+    token = secrets.token_hex(16)
+
+    # P2P survival mode: 2 lives (like group stage)
+    p2p_lives = 2
+
+    session = GameSession(
+        user_id=current_user.id,
+        session_token=token,
+        status="active",
+        lives_remaining=p2p_lives,
+        is_league_game=True,
+        is_p2p=True,
+        league_challenge_id=challenge_id,
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+
+    return StartSessionResponse(
+        session_id=session.id,
+        session_token=session.session_token,
+        trials_remaining=0,
+        daily_trials_remaining=0,
+        vault_trials_remaining=0,
+        starting_lives=p2p_lives,
+        trial_source="p2p",
     )
 
 @router.post("/league/session/finish")
@@ -216,6 +270,21 @@ def finish_league_session(
                 db.commit()
                 # Recalculate match outcome if both scores are in
                 process_match_completion(db, match)
+
+    if session.is_p2p and session.league_challenge_id:
+        challenge = db.query(LeagueChallenge).filter_by(id=session.league_challenge_id).first()
+        if challenge:
+            if challenge.challenger_id == current_user.id:
+                challenge.challenger_score = payload.final_score
+            elif challenge.challenged_id == current_user.id:
+                challenge.challenged_score = payload.final_score
+
+            # If both scores are in, mark as completed
+            if challenge.challenger_score is not None and challenge.challenged_score is not None:
+                challenge.status = "completed"
+
+            db.add(challenge)
+            db.commit()
 
     db.commit()
     return {"message": "League session recorded"}

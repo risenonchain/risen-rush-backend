@@ -27,5 +27,7 @@ class GameSession(Base):
 
     is_league_game = Column(Boolean, default=False)  # NEW: True if this is a league game
     league_match_id = Column(Integer, ForeignKey("league_matches.id"), nullable=True)  # NEW: link to league match
+    is_p2p = Column(Boolean, default=False)
+    league_challenge_id = Column(Integer, ForeignKey("league_challenges.id"), nullable=True)
 
     user = relationship("User")

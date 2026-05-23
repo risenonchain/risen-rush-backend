@@ -47,6 +47,7 @@ class LeagueFixture(Base):
     player1_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     player2_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     scheduled_at = Column(DateTime)
+    first_start_at = Column(DateTime) # NEW: tracking when the first player started
     result_submitted = Column(Boolean, default=False)
     stage = Column(String, default="group")  # NEW: 'group', 'semifinal', 'final', etc.
     group_name = Column(String, nullable=True)  # NEW: for group stage
@@ -109,5 +110,7 @@ class LeagueChallenge(Base):
     challenged_id = Column(Integer, ForeignKey("users.id"))
     scheduled_at = Column(DateTime, nullable=False)
     status = Column(String(20), default='pending') # pending, accepted, rejected, cancelled, completed
+    challenger_score = Column(Integer)
+    challenged_score = Column(Integer)
     created_at = Column(DateTime, server_default=func.now())
     expires_at = Column(DateTime)
