@@ -1,4 +1,4 @@
-import httpx
+import requests
 import logging
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
@@ -29,15 +29,18 @@ class WalletIntelligenceService:
         chain_id = WalletIntelligenceService.SUPPORTED_CHAINS.get(network.lower(), "56")
 
         try:
-            async with httpx.AsyncClient(timeout=20.0, verify=False) as client:
-                # Correct GoPlus Address API Format: .../address_security/{address}?chain_id={chain_id}
-                url = f"{WalletIntelligenceService.GOPLUS_WALLET_BASE_URL}/{address}?chain_id={chain_id}"
-                response = await client.get(
-                    url,
-                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
-                )
-                response.raise_for_status()
-                data = response.json()
+            # Using requests for reliability with SSL/SNI
+            url = f"{WalletIntelligenceService.GOPLUS_WALLET_BASE_URL}/{address}?chain_id={chain_id}"
+            response = requests.get(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                },
+                timeout=20.0,
+                verify=False
+            )
+            response.raise_for_status()
+            data = response.json()
         except Exception as e:
             logger.error(f"Wallet analysis failed for {address} on {network}: {e}")
             raise Exception(f"Wallet Security API Error: {str(e)}")

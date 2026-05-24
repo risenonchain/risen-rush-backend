@@ -1,4 +1,4 @@
-import httpx
+import requests
 import logging
 import os
 from typing import Optional, Dict, Any
@@ -49,23 +49,23 @@ class GuardianService:
 
         try:
             api_base = os.getenv("NEXT_PUBLIC_AI_API_URL") or "https://risen-ai-backend.onrender.com"
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{api_base}/ai/chat",
-                    json={
-                        "message": prompt,
-                        "session_id": f"guardian_{scan.id}",
-                        "context": {"mode": "guardian"}
-                    },
-                    timeout=30.0
-                )
-                response.raise_for_status()
-                data = response.json()
+            # Using requests for reliability with SSL/SNI
+            response = requests.post(
+                f"{api_base}/ai/chat",
+                json={
+                    "message": prompt,
+                    "session_id": f"guardian_{scan.id}",
+                    "context": {"mode": "guardian"}
+                },
+                timeout=30.0
+            )
+            response.raise_for_status()
+            data = response.json()
 
-                # Extract text from AI response
-                if data.get("type") == "text":
-                    return data["data"]["content"]
-                return "Neural interpretation failed. Please review raw metrics."
+            # Extract text from AI response
+            if data.get("type") == "text":
+                return data["data"]["content"]
+            return "Neural interpretation failed. Please review raw metrics."
         except Exception as e:
             logger.error(f"AI Consultation failed for scan {scan_id}: {e}")
             return f"Neural uplink timeout. Basic analysis: Risk Score {scan.risk_score}."
@@ -82,14 +82,18 @@ class GuardianService:
 
         # 2. Call GoPlus API
         try:
-            async with httpx.AsyncClient(timeout=20.0, verify=False) as client:
-                url = f"{GuardianService.GOPLUS_BASE_URL}/{chain_id}?contract_addresses={address}"
-                response = await client.get(
-                    url,
-                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
-                )
-                response.raise_for_status()
-                data = response.json()
+            url = f"{GuardianService.GOPLUS_BASE_URL}/{chain_id}?contract_addresses={address}"
+            # Using requests with verify=False and Host header to bypass SNI issues
+            response = requests.get(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                },
+                timeout=20.0,
+                verify=False
+            )
+            response.raise_for_status()
+            data = response.json()
         except Exception as e:
             logger.error(f"Failed to fetch security data for {address} on {network}: {e}")
             raise Exception(f"Security API Error: {str(e)}")
@@ -97,6 +101,16 @@ class GuardianService:
         if data.get("code") != 1 or not data.get("result"):
             logger.warning(f"No result found for address {address} on {network}")
             raise Exception(f"No security data found for this address on {network}")
+
+        # Find the result key in a case-insensitive way
+        result = None
+        for key in data["result"]:
+            if key.lower() == address.lower():
+                result = data["result"][key]
+                break
+
+        if not result:
+            raise Exception(f"Target address data not found in API response")
 
         # Find the result key in a case-insensitive way
         result = None

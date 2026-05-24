@@ -45,7 +45,7 @@ async def scan_contract(
             )
 
     try:
-        scan = await GuardianService.scan_contract(db, address, network, current_user)
+        scan = await GuardianService.scan_contract(db=db, address=address, network=network, user=current_user)
         return scan
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -135,7 +135,7 @@ async def analyze_wallet(
     Analyze a wallet address for risk.
     """
     try:
-        result = await WalletIntelligenceService.analyze_wallet(db, address, current_user)
+        result = await WalletIntelligenceService.analyze_wallet(db=db, address=address, current_user=current_user, network="bsc")
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
