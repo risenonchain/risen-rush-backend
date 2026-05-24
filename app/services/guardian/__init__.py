@@ -6,11 +6,11 @@ from app.models.guardian import GuardianContractScan, GuardianAlert
 from app.models.user import User
 from app.core.email.resend_service import EmailService
 
-# New Provider Architecture
-from .guardian.providers.goplus import GoPlusProvider
-from .guardian.providers.dexscreener import DexScreenerProvider
-from .guardian.providers.honeypot import HoneypotIsProvider
-from .guardian.intelligence.risk_engine import RiskEngine
+# Internal Package Imports
+from .providers.goplus import GoPlusProvider
+from .providers.dexscreener import DexScreenerProvider
+from .providers.honeypot import HoneypotIsProvider
+from .intelligence.risk_engine import RiskEngine
 
 logger = logging.getLogger(__name__)
 
@@ -53,13 +53,13 @@ class GuardianService:
             address=address,
             network=network,
             risk_score=risk_score,
-            is_honeypot=result.get("is_honeypot") == "1",
-            buy_tax=float(result.get("buy_tax", 0) or 0) * 100,
-            sell_tax=float(result.get("sell_tax", 0) or 0) * 100,
-            owner_address=result.get("owner_address"),
-            is_proxy=result.get("is_proxy") == "1",
-            has_mint_function=result.get("is_mintable") == "1",
-            is_open_source=result.get("is_open_source") == "1",
+            is_honeypot=result.get("is_honeypot") == "1" if result else False,
+            buy_tax=float(result.get("buy_tax", 0) or 0) * 100 if result else 0,
+            sell_tax=float(result.get("sell_tax", 0) or 0) * 100 if result else 0,
+            owner_address=result.get("owner_address") if result else None,
+            is_proxy=result.get("is_proxy") == "1" if result else False,
+            has_mint_function=result.get("is_mintable") == "1" if result else False,
+            is_open_source=result.get("is_open_source") == "1" if result else True,
             raw_data=result,
             scanned_by_user_id=user.id if user else None
         )

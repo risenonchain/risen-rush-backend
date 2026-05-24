@@ -6,9 +6,9 @@ from app.models.guardian import GuardianAlert
 from app.models.user import User
 from app.core.email.resend_service import EmailService
 
-logger = logging.getLogger(__name__)
-
 from ..guardian.providers.goplus import GoPlusProvider
+
+logger = logging.getLogger(__name__)
 
 class WalletIntelligenceService:
     @staticmethod
