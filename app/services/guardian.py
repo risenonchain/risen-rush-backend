@@ -1,4 +1,3 @@
-import requests
 import logging
 import os
 from typing import Optional, Dict, Any
@@ -7,131 +6,55 @@ from app.models.guardian import GuardianContractScan, GuardianAlert
 from app.models.user import User
 from app.core.email.resend_service import EmailService
 
+# New Provider Architecture
+from .guardian.providers.goplus import GoPlusProvider
+from .guardian.providers.dexscreener import DexScreenerProvider
+from .guardian.providers.honeypot import HoneypotIsProvider
+from .guardian.intelligence.risk_engine import RiskEngine
+
 logger = logging.getLogger(__name__)
 
 class GuardianService:
-    # GoPlus Security API Base URL
-    GOPLUS_BASE_URL = "https://api.goplussecurity.com/api/v1/token_security"
-
-    SUPPORTED_CHAINS = {
-        "bsc": "56",
-        "ethereum": "1",
-        "eth": "1",
-        "polygon": "137",
-        "avalanche": "43114",
-        "arbitrum": "42161",
-        "base": "8453",
-        "solana": "solana"
-    }
-
-    @staticmethod
-    async def get_ai_explanation(db: Session, scan_id: int) -> str:
-        """
-        Consults RISEN AI to explain the risks found in a specific scan.
-        """
-        scan = db.query(GuardianContractScan).filter(GuardianContractScan.id == scan_id).first()
-        if not scan:
-            raise Exception("Scan record not found")
-
-        # Prepare context for RISEN AI
-        risk_details = f"""
-        Contract: {scan.address}
-        Risk Score: {scan.risk_score}/100
-        Honeypot: {scan.is_honeypot}
-        Buy Tax: {scan.buy_tax}%
-        Sell Tax: {scan.sell_tax}%
-        Proxy: {scan.is_proxy}
-        Mintable: {scan.has_mint_function}
-        Verified: {scan.is_open_source}
-        """
-
-        prompt = f"As RISEN Guardian AI, analyze this contract scan and provide a professional, concise security verdict and recommendation for a trader: {risk_details}"
-
-        try:
-            api_base = os.getenv("NEXT_PUBLIC_AI_API_URL") or "https://risen-ai-backend.onrender.com"
-            # Using requests for reliability with SSL/SNI
-            response = requests.post(
-                f"{api_base}/ai/chat",
-                json={
-                    "message": prompt,
-                    "session_id": f"guardian_{scan.id}",
-                    "context": {"mode": "guardian"}
-                },
-                timeout=30.0
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            # Extract text from AI response
-            if data.get("type") == "text":
-                return data["data"]["content"]
-            return "Neural interpretation failed. Please review raw metrics."
-        except Exception as e:
-            logger.error(f"AI Consultation failed for scan {scan_id}: {e}")
-            return f"Neural uplink timeout. Basic analysis: Risk Score {scan.risk_score}."
-
     @staticmethod
     async def scan_contract(db: Session, address: str, network: str = "bsc", user: Optional[User] = None) -> GuardianContractScan:
         """
-        Scans a contract address on supported chains using GoPlus Security API.
+        Scans a contract address using multiple providers and calculates a deterministic risk score.
         """
         address = address.lower().strip()
         network = network.lower().strip()
 
-        chain_id = GuardianService.SUPPORTED_CHAINS.get(network, "56")
+        # 1. Gather Data from Providers
+        providers_data = {}
 
-        # 2. Call GoPlus API
-        try:
-            url = f"{GuardianService.GOPLUS_BASE_URL}/{chain_id}?contract_addresses={address}"
-            # Standard requests call with minimal headers to avoid SNI confusion
-            response = requests.get(
-                url,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-                },
-                timeout=20.0,
-                verify=False
-            )
-            response.raise_for_status()
-            data = response.json()
-        except Exception as e:
-            logger.error(f"Failed to fetch security data for {address} on {network}: {e}")
-            raise Exception(f"Security API Error: {str(e)}")
+        # parallel execution would be better but keeping it simple for stability
+        # GoPlus
+        goplus = GoPlusProvider()
+        providers_data["goplus"] = await goplus.scan(address, network)
 
-        if data.get("code") != 1 or not data.get("result"):
-            logger.warning(f"No result found for address {address} on {network}")
-            raise Exception(f"No security data found for this address on {network}")
+        # DexScreener
+        dex = DexScreenerProvider()
+        providers_data["dexscreener"] = await dex.scan(address, network)
 
-        # Find the result key in a case-insensitive way
-        result = None
-        for key in data["result"]:
-            if key.lower() == address.lower():
-                result = data["result"][key]
-                break
+        # Honeypot.is
+        hp = HoneypotIsProvider()
+        providers_data["honeypot_is"] = await hp.scan(address, network)
 
-        if not result:
-            raise Exception(f"Target address data not found in API response")
+        # Fallback Logic: If everything fails, we raise an error
+        if not providers_data["goplus"] and not providers_data["honeypot_is"]:
+             raise Exception(f"No security data found for this address across all providers.")
 
-        # Find the result key in a case-insensitive way
-        result = None
-        for key in data["result"]:
-            if key.lower() == address.lower():
-                result = data["result"][key]
-                break
+        # 2. Calculate Deterministic Risk Score
+        risk_score = RiskEngine.calculate_score(providers_data)
 
-        if not result:
-            raise Exception(f"Target address data not found in API response")
+        result = providers_data["goplus"] # Using primary provider for database fields
 
-        # 3. Calculate Risk Score (Proprietary Logic)
-        risk_score = GuardianService._calculate_risk_score(result)
-
-        # 4. Save to Database
+        # 3. Save to Database
         scan = GuardianContractScan(
             address=address,
             network=network,
             risk_score=risk_score,
             is_honeypot=result.get("is_honeypot") == "1",
-            buy_tax=float(result.get("buy_tax", 0) or 0) * 100, # Convert to percentage
+            buy_tax=float(result.get("buy_tax", 0) or 0) * 100,
             sell_tax=float(result.get("sell_tax", 0) or 0) * 100,
             owner_address=result.get("owner_address"),
             is_proxy=result.get("is_proxy") == "1",
@@ -143,7 +66,7 @@ class GuardianService:
 
         db.add(scan)
 
-        # 5. If High Risk, Create Alert for User
+        # 4. Handle Alerts
         if risk_score > 70 and user:
             alert = GuardianAlert(
                 user_id=user.id,
@@ -155,7 +78,7 @@ class GuardianService:
             )
             db.add(alert)
 
-            # Send Email Alert
+            # TODO: Move to shared event-driven notification system
             if user.email:
                 try:
                     EmailService.send_security_alert(
@@ -173,28 +96,44 @@ class GuardianService:
         return scan
 
     @staticmethod
-    def _calculate_risk_score(data: Dict[str, Any]) -> int:
+    async def get_ai_explanation(db: Session, scan_id: int) -> str:
         """
-        Calculates a risk score from 0-100 based on various factors.
+        AI is only used for EXPLANATION, never for SCORING.
         """
-        score = 0
+        import requests
+        scan = db.query(GuardianContractScan).filter(GuardianContractScan.id == scan_id).first()
+        if not scan:
+            raise Exception("Scan record not found")
 
-        # Honeypot is automatic 100
-        if data.get("is_honeypot") == "1":
-            return 100
+        risk_details = f"""
+        Contract: {scan.address}
+        Risk Score: {scan.risk_score}/100
+        Honeypot: {scan.is_honeypot}
+        Buy Tax: {scan.buy_tax}%
+        Sell Tax: {scan.sell_tax}%
+        Proxy: {scan.is_proxy}
+        Mintable: {scan.has_mint_function}
+        Verified: {scan.is_open_source}
+        """
 
-        # Taxes
-        buy_tax = float(data.get("buy_tax", 0) or 0)
-        sell_tax = float(data.get("sell_tax", 0) or 0)
-        if buy_tax > 0.10 or sell_tax > 0.10: score += 30
-        if buy_tax > 0.25 or sell_tax > 0.25: score += 40
+        prompt = f"As RISEN Guardian AI, explain the security risks of this contract and provide a trader recommendation: {risk_details}"
 
-        # Security Flags
-        if data.get("is_proxy") == "1": score += 20
-        if data.get("is_mintable") == "1": score += 20
-        if data.get("can_take_back_ownership") == "1": score += 30
-        if data.get("owner_change_balance") == "1": score += 40
-        if data.get("is_open_source") == "0": score += 50
-
-        # Cap score at 99 (100 is reserved for honeypots)
-        return min(score, 99)
+        try:
+            api_base = os.getenv("NEXT_PUBLIC_AI_API_URL") or "https://risen-ai-backend.onrender.com"
+            response = requests.post(
+                f"{api_base}/ai/chat",
+                json={
+                    "message": prompt,
+                    "session_id": f"guardian_{scan.id}",
+                    "context": {"mode": "guardian"}
+                },
+                timeout=30.0
+            )
+            response.raise_for_status()
+            data = response.json()
+            if data.get("type") == "text":
+                return data["data"]["content"]
+            return "Neural interpretation failed. Please review raw metrics."
+        except Exception as e:
+            logger.error(f"AI Consultation failed for scan {scan_id}: {e}")
+            return f"Neural uplink timeout. Basic analysis: Risk Score {scan.risk_score}."
