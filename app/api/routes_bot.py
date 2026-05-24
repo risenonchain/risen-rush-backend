@@ -45,3 +45,24 @@ def create_bot_wallet(chat_id: str, pin: str, db: Session = Depends(get_db), _ =
 
     wallet = BotWalletService.create_wallet(db, user, pin)
     return {"status": "success", "address": wallet.address}
+
+@router.post("/trade/buy")
+async def bot_trade_buy(
+    chat_id: str,
+    pin: str,
+    token_address: str,
+    amount_bnb: float,
+    db: Session = Depends(get_db),
+    _ = Depends(verify_bot_secret)
+):
+    """
+    Executes a buy order via the bot.
+    """
+    user = db.query(User).filter(User.telegram_chat_id == chat_id).first()
+    if not user: raise HTTPException(status_code=404, detail="Account not linked")
+
+    try:
+        result = await BotWalletService.execute_pancake_buy(db, user, pin, token_address, amount_bnb)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

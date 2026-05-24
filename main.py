@@ -30,11 +30,12 @@ from app.models.season import Season  # noqa
 from app.models.redemption_request import RedemptionRequest  # noqa
 from app.models.guardian import GuardianContractScan, GuardianWatchlist, GuardianAlert # noqa
 from app.models.bot_wallet import GuardianBotWallet # noqa
+from app.models.bridge import BridgeTransaction # noqa
 from app.models.league import (  # noqa
     LeagueEvent, LeagueRegistration, LeagueParticipant,
     LeagueFixture, LeagueMatch, LeagueStanding,
     LeagueTopScore, LeagueDeepestRunner, LeagueAdminAudit,
-    LeagueLiveAccess
+    LeagueLiveAccess, LeagueChallenge
 )
 
 print("DATABASE_URL IN USE:", settings.database_url)
