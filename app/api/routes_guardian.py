@@ -135,7 +135,13 @@ async def analyze_wallet(
     Analyze a wallet address for risk.
     """
     try:
-        result = await WalletIntelligenceService.analyze_wallet(db=db, address=address, current_user=current_user, network="bsc")
+        # Use explicit keywords to ensure User object isn't passed as Network string
+        result = await WalletIntelligenceService.analyze_wallet(
+            db=db,
+            address=address,
+            user=current_user,
+            network="bsc"
+        )
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

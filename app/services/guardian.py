@@ -83,7 +83,7 @@ class GuardianService:
         # 2. Call GoPlus API
         try:
             url = f"{GuardianService.GOPLUS_BASE_URL}/{chain_id}?contract_addresses={address}"
-            # Using requests with verify=False and Host header to bypass SNI issues
+            # Standard requests call with minimal headers to avoid SNI confusion
             response = requests.get(
                 url,
                 headers={

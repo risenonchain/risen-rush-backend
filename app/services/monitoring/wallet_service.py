@@ -21,12 +21,13 @@ class WalletIntelligenceService:
     }
 
     @staticmethod
-    async def analyze_wallet(db: Session, address: str, current_user: Optional[User] = None, network: str = "bsc") -> Dict[str, Any]:
+    async def analyze_wallet(db: Session, address: str, user: Optional[User] = None, network: str = "bsc") -> Dict[str, Any]:
         """
         Analyzes a wallet address for malicious behavior or risk.
         """
         address = address.lower().strip()
-        chain_id = WalletIntelligenceService.SUPPORTED_CHAINS.get(network.lower(), "56")
+        network = network.lower().strip()
+        chain_id = WalletIntelligenceService.SUPPORTED_CHAINS.get(network, "56")
 
         try:
             # Using requests for reliability with SSL/SNI
