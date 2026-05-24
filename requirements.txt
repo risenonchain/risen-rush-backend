@@ -9,3 +9,7 @@ python-multipart
 email-validator
 psycopg2-binary
 requests
+httpx
+web3
+cryptography
+resend
