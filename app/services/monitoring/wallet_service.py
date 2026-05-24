@@ -21,7 +21,7 @@ class WalletIntelligenceService:
     }
 
     @staticmethod
-    async def analyze_wallet(db: Session, address: str, network: str = "bsc", user: Optional[User] = None) -> Dict[str, Any]:
+    async def analyze_wallet(db: Session, address: str, current_user: Optional[User] = None, network: str = "bsc") -> Dict[str, Any]:
         """
         Analyzes a wallet address for malicious behavior or risk.
         """
@@ -29,7 +29,7 @@ class WalletIntelligenceService:
         chain_id = WalletIntelligenceService.SUPPORTED_CHAINS.get(network.lower(), "56")
 
         try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
+            async with httpx.AsyncClient(timeout=20.0, verify=False) as client:
                 # Correct GoPlus Address API Format: .../address_security/{address}?chain_id={chain_id}
                 url = f"{WalletIntelligenceService.GOPLUS_WALLET_BASE_URL}/{address}?chain_id={chain_id}"
                 response = await client.get(
@@ -54,9 +54,9 @@ class WalletIntelligenceService:
         elif result.get("data_source"): risk_score = 20 # Basic score for active wallets
 
         # If malicious and we have a user, alert them
-        if is_malicious and user:
+        if is_malicious and current_user:
             alert = GuardianAlert(
-                user_id=user.id,
+                user_id=current_user.id,
                 severity="critical",
                 category="wallet_activity",
                 title=f"Malicious Wallet Flagged: {address[:8]}...",
@@ -65,11 +65,11 @@ class WalletIntelligenceService:
             )
             db.add(alert)
 
-            if user.email:
+            if current_user.email:
                 try:
                     EmailService.send_security_alert(
-                        to_email=user.email,
-                        username=user.username,
+                        to_email=current_user.email,
+                        username=current_user.username,
                         title="Critical: Malicious Wallet Detected",
                         message=alert.message,
                         risk_score=100

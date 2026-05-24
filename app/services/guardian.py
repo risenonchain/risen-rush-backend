@@ -82,7 +82,7 @@ class GuardianService:
 
         # 2. Call GoPlus API
         try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
+            async with httpx.AsyncClient(timeout=20.0, verify=False) as client:
                 url = f"{GuardianService.GOPLUS_BASE_URL}/{chain_id}?contract_addresses={address}"
                 response = await client.get(
                     url,
