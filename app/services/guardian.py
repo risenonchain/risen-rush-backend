@@ -92,13 +92,21 @@ class GuardianService:
                 data = response.json()
         except Exception as e:
             logger.error(f"Failed to fetch security data for {address} on {network}: {e}")
-            raise Exception(f"Security API unavailable for {network}")
+            raise Exception(f"Security API Error: {str(e)}")
 
         if data.get("code") != 1 or not data.get("result"):
             logger.warning(f"No result found for address {address} on {network}")
             raise Exception(f"No security data found for this address on {network}")
 
-        result = data["result"][address]
+        # Find the result key in a case-insensitive way
+        result = None
+        for key in data["result"]:
+            if key.lower() == address.lower():
+                result = data["result"][key]
+                break
+
+        if not result:
+            raise Exception(f"Target address data not found in API response")
 
         # 3. Calculate Risk Score (Proprietary Logic)
         risk_score = GuardianService._calculate_risk_score(result)

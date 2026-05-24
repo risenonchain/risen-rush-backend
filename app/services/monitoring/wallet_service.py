@@ -9,28 +9,38 @@ from app.core.email.resend_service import EmailService
 logger = logging.getLogger(__name__)
 
 class WalletIntelligenceService:
-    # BSCScan API or Similar for Wallet Analysis
-    # Using GoPlus for Wallet Security as well
-    GOPLUS_WALLET_URL = "https://api.goplussecurity.com/api/v1/address_security/56"
+    # GoPlus Security API Base URL for Addresses
+    GOPLUS_WALLET_BASE_URL = "https://api.goplussecurity.com/api/v1/address_security"
+
+    SUPPORTED_CHAINS = {
+        "bsc": "56",
+        "ethereum": "1",
+        "polygon": "137",
+        "base": "8453",
+        "arbitrum": "42161"
+    }
 
     @staticmethod
-    async def analyze_wallet(db: Session, address: str, user: Optional[User] = None) -> Dict[str, Any]:
+    async def analyze_wallet(db: Session, address: str, network: str = "bsc", user: Optional[User] = None) -> Dict[str, Any]:
         """
         Analyzes a wallet address for malicious behavior or risk.
         """
         address = address.lower().strip()
+        chain_id = WalletIntelligenceService.SUPPORTED_CHAINS.get(network.lower(), "56")
 
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
+                # Correct GoPlus Address API Format: .../address_security/{address}?chain_id={chain_id}
+                url = f"{WalletIntelligenceService.GOPLUS_WALLET_BASE_URL}/{address}?chain_id={chain_id}"
                 response = await client.get(
-                    f"{WalletIntelligenceService.GOPLUS_WALLET_URL}?address={address}",
+                    url,
                     headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
                 )
                 response.raise_for_status()
                 data = response.json()
         except Exception as e:
-            logger.error(f"Wallet analysis failed for {address}: {e}")
-            raise Exception("Wallet Security API unavailable")
+            logger.error(f"Wallet analysis failed for {address} on {network}: {e}")
+            raise Exception(f"Wallet Security API Error: {str(e)}")
 
         if data.get("code") != 1 or not data.get("result"):
             raise Exception("No security data found for this wallet")
