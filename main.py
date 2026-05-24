@@ -13,6 +13,10 @@ from app.api.routes_modal import router as modal_router
 from app.api.routes_ads import router as ads_router
 from app.api.routes_payments import router as payments_router
 from app.api.routes_announcement import router as announcement_router
+from app.api.routes_guardian import router as guardian_router
+from app.api.routes_bridge import router as bridge_router
+from app.api.routes_sweeper import router as sweeper_router
+from app.api.routes_bot import router as bot_router
 from app.db.database import Base, engine
 from app.db.migrations import run_migrations
 
@@ -24,6 +28,8 @@ from app.models.referral_reward import ReferralReward  # noqa
 from app.models.season import Season  # noqa
 #from app.models.user_device import UserDevice  # noqa
 from app.models.redemption_request import RedemptionRequest  # noqa
+from app.models.guardian import GuardianContractScan, GuardianWatchlist, GuardianAlert # noqa
+from app.models.bot_wallet import GuardianBotWallet # noqa
 from app.models.league import (  # noqa
     LeagueEvent, LeagueRegistration, LeagueParticipant,
     LeagueFixture, LeagueMatch, LeagueStanding,
@@ -110,6 +116,10 @@ app.include_router(modal_router)
 app.include_router(ads_router)
 app.include_router(payments_router)
 app.include_router(announcement_router)
+app.include_router(guardian_router)
+app.include_router(bridge_router)
+app.include_router(sweeper_router)
+app.include_router(bot_router)
 
 
 @app.get("/")

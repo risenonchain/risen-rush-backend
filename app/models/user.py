@@ -44,6 +44,9 @@ class User(Base):
 
     is_admin = Column(Boolean, default=False, nullable=False)
 
+    # Telegram Integration
+    telegram_chat_id = Column(String, unique=True, index=True, nullable=True)
+
     # Compliance & Marketing
     agreed_to_terms = Column(Boolean, default=False, nullable=False)
     marketing_consent = Column(Boolean, default=False, nullable=False)
