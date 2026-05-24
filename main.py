@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.routes_auth import router as auth_router
 from app.api.routes_game import router as rush_router
+from app.api.routes_league import router as league_router
 from app.api.routes_leaderboard import router as leaderboard_router
 from app.api.routes_profile import router as profile_router
 from app.api.routes_admin import router as admin_router
