@@ -21,8 +21,11 @@ class WalletIntelligenceService:
         address = address.lower().strip()
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(f"{WalletIntelligenceService.GOPLUS_WALLET_URL}?address={address}")
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.get(
+                    f"{WalletIntelligenceService.GOPLUS_WALLET_URL}?address={address}",
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+                )
                 response.raise_for_status()
                 data = response.json()
         except Exception as e:
