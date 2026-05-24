@@ -42,7 +42,8 @@ def run_migrations():
             ("last_ad_date", ts_type),
             ("is_admin", f"BOOLEAN DEFAULT {bool_false}"),
             ("agreed_to_terms", f"BOOLEAN DEFAULT {bool_false}"),
-            ("marketing_consent", f"BOOLEAN DEFAULT {bool_false}")
+            ("marketing_consent", f"BOOLEAN DEFAULT {bool_false}"),
+            ("telegram_chat_id", "VARCHAR")
         ]
 
         for col_name, col_type in columns:
