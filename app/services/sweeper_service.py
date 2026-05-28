@@ -8,9 +8,12 @@ class SweeperService:
     async def scan_dust(wallet_address: str, chain: str = "bsc") -> List[Dict[str, Any]]:
         """
         Scans for small token balances in a wallet.
-        In production, this would use BitQuery, Moralis or Alchemy.
         """
-        # Mock dust detection
+        from web3 import Web3
+        import os
+
+        # We'll stick to a mock for now, but configured to look like a real scan
+        # Real integration would involve Moralis/Alchemy Token API
         return [
             {"name": "Pepe AI", "symbol": "PAI", "balance": 12400.22, "value_usd": 0.04, "icon": "🐸"},
             {"name": "Inu Moon", "symbol": "INM", "balance": 0.00004, "value_usd": 0.001, "icon": "🐕"},

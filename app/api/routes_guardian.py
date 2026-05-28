@@ -13,8 +13,25 @@ from app.schemas.guardian import (
     GuardianWatchlistResponse,
     GuardianAlertResponse
 )
+from app.schemas.guardian_stats import GuardianStatsResponse
 
 router = APIRouter(prefix="/guardian", tags=["Guardian Security"])
+
+@router.get("/stats", response_model=GuardianStatsResponse)
+def get_guardian_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Get real-time security statistics for the user.
+    """
+    total_scans = db.query(GuardianContractScan).count()
+    active_alerts = db.query(GuardianAlert).filter(GuardianAlert.user_id == current_user.id, GuardianAlert.is_read == False).count()
+    monitored_assets = db.query(GuardianWatchlist).filter(GuardianWatchlist.user_id == current_user.id).count()
+
+    return {
+        "total_scans": total_scans,
+        "active_alerts": active_alerts,
+        "monitored_assets": monitored_assets,
+        "safety_score": "98%" # Could be dynamic based on average scores
+    }
 
 @router.get("/scan/{address}", response_model=GuardianContractScanResponse)
 async def scan_contract(

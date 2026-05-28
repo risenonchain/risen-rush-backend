@@ -39,6 +39,8 @@ class GuardianService:
         hp = HoneypotIsProvider()
         providers_data["honeypot_is"] = await hp.scan(address, network)
 
+        logger.info(f"Scan complete for {address}. GoPlus: {bool(providers_data['goplus'])}, Dex: {bool(providers_data['dexscreener'])}, HP: {bool(providers_data['honeypot_is'])}")
+
         # Fallback Logic: If everything fails, we raise an error
         if not providers_data["goplus"] and not providers_data["honeypot_is"]:
              raise Exception(f"No security data found for this address across all providers.")
@@ -119,7 +121,8 @@ class GuardianService:
         prompt = f"As RISEN Guardian AI, explain the security risks of this contract and provide a trader recommendation: {risk_details}"
 
         try:
-            api_base = os.getenv("NEXT_PUBLIC_AI_API_URL") or "https://risen-ai-backend.onrender.com"
+            # Match the variable name in your Vercel/Production env
+            api_base = os.getenv("NEXT_PUBLIC_AI_API_URL") or os.getenv("AI_API_URL") or "https://risen-ai-backend.onrender.com"
             response = requests.post(
                 f"{api_base}/ai/chat",
                 json={
@@ -127,7 +130,11 @@ class GuardianService:
                     "session_id": f"guardian_{scan.id}",
                     "context": {"mode": "guardian"}
                 },
-                timeout=30.0
+                headers={
+                    "Content-Type": "application/json",
+                    "X-App-Version": "1.1.0"
+                },
+                timeout=25.0
             )
             response.raise_for_status()
             data = response.json()
