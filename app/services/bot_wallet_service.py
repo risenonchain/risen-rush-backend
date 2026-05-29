@@ -96,6 +96,7 @@ class BotWalletService:
     async def execute_pancake_buy(db: Session, user: User, pin: str, token_address: str, amount_bnb: float):
         """
         Executes a token buy on PancakeSwap using the bot wallet.
+        Supports tokens with fees on transfer.
         """
         wallet = db.query(GuardianBotWallet).filter(GuardianBotWallet.user_id == user.id).first()
         if not wallet: raise Exception("No bot wallet found")
@@ -113,20 +114,83 @@ class BotWalletService:
         nonce = w3.eth.get_transaction_count(account.address)
         path = [w3.to_checksum_address(WBNB_ADDRESS), w3.to_checksum_address(token_address)]
 
-        tx = router.functions.swapExactETHForTokens(
-            0, # amountOutMin (slippage not handled for now)
+        # Use swapExactETHForTokensSupportingFeeOnTransferTokens for compatibility with meme tokens
+        tx = router.functions.swapExactETHForTokensSupportingFeeOnTransferTokens(
+            0, # amountOutMin
             path,
             account.address,
             int(time.time()) + 600
         ).build_transaction({
             'from': account.address,
             'value': w3.to_wei(amount_bnb, 'ether'),
-            'gas': 250000,
+            'gas': 350000, # Increased gas for taxable tokens
             'gasPrice': w3.eth.gas_price,
             'nonce': nonce,
         })
 
         signed_tx = w3.eth.account.sign_transaction(tx, private_key=priv_key)
         tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+
+        return {"status": "success", "tx_hash": tx_hash.hex()}
+
+    @staticmethod
+    async def execute_pancake_sell(db: Session, user: User, pin: str, token_address: str, percentage: float):
+        """
+        Executes a token sell on PancakeSwap.
+        """
+        wallet = db.query(GuardianBotWallet).filter(GuardianBotWallet.user_id == user.id).first()
+        if not wallet: raise Exception("No bot wallet found")
+
+        try:
+            priv_key = decrypt_private_key(wallet.encrypted_private_key, pin)
+        except: raise Exception("Invalid PIN")
+
+        w3 = BotWalletService.get_w3("bsc")
+        account = Account.from_key(priv_key)
+
+        # 1. Get Token Balance
+        token_contract = w3.eth.contract(address=w3.to_checksum_address(token_address), abi=ERC20_ABI)
+        full_balance = token_contract.functions.balanceOf(account.address).call()
+
+        if full_balance == 0: raise Exception("No tokens to sell")
+
+        amount_to_sell = int(full_balance * (percentage / 100))
+
+        # 2. Approve Router
+        nonce = w3.eth.get_transaction_count(account.address)
+        approve_tx = token_contract.functions.approve(
+            w3.to_checksum_address(PANCAKE_ROUTER_ADDRESS),
+            amount_to_sell
+        ).build_transaction({
+            'from': account.address,
+            'gas': 100000,
+            'gasPrice': w3.eth.gas_price,
+            'nonce': nonce,
+        })
+
+        signed_approve = w3.eth.account.sign_transaction(approve_tx, private_key=priv_key)
+        w3.eth.send_raw_transaction(signed_approve.raw_transaction)
+
+        # 3. Swap
+        time.sleep(2) # Wait a bit for approval to propagate
+
+        router = w3.eth.contract(address=w3.to_checksum_address(PANCAKE_ROUTER_ADDRESS), abi=PANCAKE_ROUTER_ABI)
+        path = [w3.to_checksum_address(token_address), w3.to_checksum_address(WBNB_ADDRESS)]
+
+        swap_tx = router.functions.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            amount_to_sell,
+            0,
+            path,
+            account.address,
+            int(time.time()) + 600
+        ).build_transaction({
+            'from': account.address,
+            'gas': 350000,
+            'gasPrice': w3.eth.gas_price,
+            'nonce': nonce + 1,
+        })
+
+        signed_swap = w3.eth.account.sign_transaction(swap_tx, private_key=priv_key)
+        tx_hash = w3.eth.send_raw_transaction(signed_swap.raw_transaction)
 
         return {"status": "success", "tx_hash": tx_hash.hex()}

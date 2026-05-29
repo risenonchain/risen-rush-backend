@@ -66,3 +66,24 @@ async def bot_trade_buy(
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/trade/sell")
+async def bot_trade_sell(
+    chat_id: str,
+    pin: str,
+    token_address: str,
+    percentage: float,
+    db: Session = Depends(get_db),
+    _ = Depends(verify_bot_secret)
+):
+    """
+    Executes a sell order via the bot.
+    """
+    user = db.query(User).filter(User.telegram_chat_id == chat_id).first()
+    if not user: raise HTTPException(status_code=404, detail="Account not linked")
+
+    try:
+        result = await BotWalletService.execute_pancake_sell(db, user, pin, token_address, percentage)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
