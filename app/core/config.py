@@ -28,6 +28,7 @@ class Settings(BaseModel):
     resend_api_key: str = os.getenv("RESEND_API_KEY", "")
     from_email: str = os.getenv("FROM_EMAIL", "notifications@risenonchain.net")
     bot_token: str = os.getenv("BOT_TOKEN", "")
+    moralis_api_key: str = os.getenv("MORALIS_API_KEY", "")
 
 
 settings = Settings()

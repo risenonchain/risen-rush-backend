@@ -3,6 +3,7 @@ from typing import List, Any
 from app.services.sweeper_service import SweeperService
 from app.api.routes_auth import get_current_user
 from app.models.user import User
+from app.core.config import settings
 
 router = APIRouter(prefix="/sweeper", tags=["Dust Sweeper"])
 
@@ -16,7 +17,7 @@ async def scan_wallet_dust(
     Scan a wallet for fragmented balances.
     """
     try:
-        return await SweeperService.scan_dust(address, chain)
+        return await SweeperService.scan_dust(address, chain, settings.moralis_api_key)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
