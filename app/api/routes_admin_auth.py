@@ -57,21 +57,35 @@ async def admin_login(
 
     try:
         secret_b32 = base64.b32encode(TOTP_SECRET.encode()).decode()
-        totp = pyotp.TOTP(secret_b32, digits=8)
 
         if not x_admin_otp:
             raise HTTPException(status_code=403, detail="Neural Sync Required.")
 
-        # Increase valid_window to 10 (5 minutes drift) for diagnostics
-        if not totp.verify(x_admin_otp, valid_window=10):
+        # --- SMART TIME-ZONE OFFSET CORRECTION ---
+        # We check three windows to handle the 1-hour server drift:
+        # 1. Standard (Now)
+        # 2. +1 Hour (3600 seconds ahead)
+        # 3. -1 Hour (3600 seconds behind)
+
+        verified = False
+        for offset in [0, 3600, -3600]:
+            totp = pyotp.TOTP(secret_b32, digits=8)
+            # Use a tighter window (drift=1) but shift the base time by 'offset'
+            # totp.at() generates/verifies the code for a specific timestamp
+            current_timestamp = int(time.time()) + offset
+            if totp.verify(x_admin_otp, for_time=current_timestamp, valid_window=2):
+                verified = True
+                break
+
+        if not verified:
             server_time = datetime.utcnow().strftime('%H:%M:%S')
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Neural Sync Failed: Handshake Invalid (Server Time: {server_time} UTC)"
+                detail=f"Neural Sync Failed: Handshake Invalid (Server: {server_time} UTC)"
             )
 
         # Success! Consume code
-        USED_NEURAL_CODES[x_admin_otp] = now + 300 # Keep in memory for 5 mins
+        USED_NEURAL_CODES[x_admin_otp] = now + 3600 # Keep in memory longer to cover all offsets
 
     except HTTPException:
         raise
