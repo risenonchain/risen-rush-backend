@@ -18,26 +18,27 @@ async def admin_login(
     x_admin_otp: str = Header(None)
 ):
     # --- ULTRA-SECURE BACKEND CREDENTIALS ---
-    # Try multiple common naming variations for robustness
-    MASTER_ADMIN_USER = os.getenv("MASTER_ADMIN_USERNAME") or os.getenv("MASTER_ADMIN_USER") or "admin"
-    MASTER_ADMIN_PASS = os.getenv("MASTER_ADMIN_PASSWORD") or os.getenv("MASTER_ADMIN_PASS")
+    # These values are pulled directly from Render Environment
+    MASTER_ADMIN_USER = os.getenv("MASTER_ADMIN_USERNAME", "risen_master_admin")
+    MASTER_ADMIN_PASS = os.getenv("MASTER_ADMIN_PASSWORD")
     TOTP_SECRET = os.getenv("ADMIN_TOTP_SECRET")
 
     # 1. Check Username and Password against Backend Env
     if not MASTER_ADMIN_PASS:
-         raise HTTPException(status_code=500, detail="Backend Configuration Error: Admin Password not set in Render.")
+         raise HTTPException(status_code=500, detail="Neural Error: Admin Passkey not defined in backend.")
 
     if form_data.username != MASTER_ADMIN_USER or form_data.password != MASTER_ADMIN_PASS:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Neural Access Denied: Core Credentials Mismatch (Check Username/Password)",
+            detail="Neural Access Denied: Core Credentials Mismatch",
         )
 
     # 2. Neural Sync (8-Digit TOTP) Check
     if not TOTP_SECRET:
-        raise HTTPException(status_code=500, detail="Backend Configuration Error: TOTP Secret not set in Render.")
+        raise HTTPException(status_code=500, detail="Neural Error: Sync Secret not defined in backend.")
 
     import base64
+    import pyotp
     try:
         # Match the user's local complex secret generation logic
         secret_b32 = base64.b32encode(TOTP_SECRET.encode()).decode()
@@ -49,24 +50,17 @@ async def admin_login(
         if not totp.verify(x_admin_otp):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Neural Sync Failed: Handshake Invalid (8-Digit Code Mismatch)"
+                detail="Neural Sync Failed: Handshake Invalid"
             )
     except Exception as e:
-         raise HTTPException(status_code=500, detail=f"Neural Engine Error: {str(e)}")
+         raise HTTPException(status_code=500, detail=f"Neural Engine Sync Error: {str(e)}")
 
-    # 3. Fetch the 'admin' user from DB just to get a valid ID for the token
-    user = db.query(User).filter(User.username == MASTER_ADMIN_USER, User.is_admin == True).first()
-    if not user:
-        # Fallback to the first admin found if 'admin' username doesn't match DB entry
-        user = db.query(User).filter(User.is_admin == True).first()
-
-    if not user:
-         raise HTTPException(status_code=500, detail="Database Error: No Admin node found to attach session.")
-
+    # 3. Use a hardcoded dummy ID for the token to avoid mixing with 'admin' player
+    # The 'sub' in the token just needs to be a string. We use '999999' as a Reserved Admin ID.
     token = create_access_token(
         data={
-            "sub": str(user.id),
-            "username": user.username,
+            "sub": "999999",
+            "username": MASTER_ADMIN_USER,
             "is_admin": True,
         }
     )
