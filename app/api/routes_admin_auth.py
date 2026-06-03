@@ -18,34 +18,43 @@ async def admin_login(
     x_admin_otp: str = Header(None)
 ):
     # --- ULTRA-SECURE BACKEND CREDENTIALS ---
-    # These values are pulled directly from Render Environment, bypassing the DB
-    MASTER_ADMIN_USER = os.getenv("MASTER_ADMIN_USERNAME", "admin")
-    MASTER_ADMIN_PASS = os.getenv("MASTER_ADMIN_PASSWORD")
+    # Try multiple common naming variations for robustness
+    MASTER_ADMIN_USER = os.getenv("MASTER_ADMIN_USERNAME") or os.getenv("MASTER_ADMIN_USER") or "admin"
+    MASTER_ADMIN_PASS = os.getenv("MASTER_ADMIN_PASSWORD") or os.getenv("MASTER_ADMIN_PASS")
     TOTP_SECRET = os.getenv("ADMIN_TOTP_SECRET")
 
     # 1. Check Username and Password against Backend Env
+    if not MASTER_ADMIN_PASS:
+         raise HTTPException(status_code=500, detail="Backend Configuration Error: Admin Password not set in Render.")
+
     if form_data.username != MASTER_ADMIN_USER or form_data.password != MASTER_ADMIN_PASS:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Neural Access Denied: Core Credentials Mismatch",
+            detail="Neural Access Denied: Core Credentials Mismatch (Check Username/Password)",
         )
 
     # 2. Neural Sync (8-Digit TOTP) Check
     if not TOTP_SECRET:
-        print("CRITICAL: ADMIN_TOTP_SECRET not found in environment!")
-    else:
-        import base64
+        raise HTTPException(status_code=500, detail="Backend Configuration Error: TOTP Secret not set in Render.")
+
+    import base64
+    try:
         # Match the user's local complex secret generation logic
         secret_b32 = base64.b32encode(TOTP_SECRET.encode()).decode()
         totp = pyotp.TOTP(secret_b32, digits=8)
-        if not x_admin_otp or not totp.verify(x_admin_otp):
+
+        if not x_admin_otp:
+            raise HTTPException(status_code=403, detail="Neural Sync Required: Please enter your 8-digit code.")
+
+        if not totp.verify(x_admin_otp):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Neural Sync Failed: Handshake Invalid"
+                detail="Neural Sync Failed: Handshake Invalid (8-Digit Code Mismatch)"
             )
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Neural Engine Error: {str(e)}")
 
     # 3. Fetch the 'admin' user from DB just to get a valid ID for the token
-    # We still need a valid user ID for subsequent permission checks
     user = db.query(User).filter(User.username == MASTER_ADMIN_USER, User.is_admin == True).first()
     if not user:
         # Fallback to the first admin found if 'admin' username doesn't match DB entry
