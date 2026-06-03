@@ -453,7 +453,7 @@ def get_my_challenges(db: Session = Depends(get_db), current_user: User = Depend
                 .filter(
                     ((LeagueChallenge.challenger_id == current_user.id) | (LeagueChallenge.challenged_id == current_user.id)),
                     User.id != current_user.id,
-                    LeagueChallenge.status.in_(['pending', 'accepted'])
+                    LeagueChallenge.status.in_(['pending', 'accepted', 'completed'])
                 ).all()
 
     out = []
