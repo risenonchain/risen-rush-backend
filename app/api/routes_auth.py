@@ -281,16 +281,8 @@ def get_current_user(
         )
 
     # --- Subscription Grace Period Logic ---
-    if user.is_premium and user.premium_expires_at:
-        # Check if expired beyond 3 days grace period
-        now = datetime.utcnow()
-        grace_limit = user.premium_expires_at + timedelta(days=3)
-        if now > grace_limit:
-            user.is_premium = False
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-        # Force fresh read of is_premium status to ensure access is revoked immediately for standard logic
+    from app.services.subscription_service import check_and_update_user_subscription
+    check_and_update_user_subscription(db, user)
 
     return user
 

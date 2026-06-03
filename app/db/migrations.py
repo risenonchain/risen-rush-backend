@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import text
 from app.db.database import engine
 
@@ -140,20 +140,7 @@ def run_migrations():
             pass
 
         # --- Immediate Cleanup of Expired Prime Users beyond grace period ---
-        # Grace period is 3 days. Revert to standard if expired more than 3 days ago.
-        if is_postgres:
-            # PostgreSQL syntax
-            execute_step("""
-                UPDATE users
-                SET is_premium = FALSE
-                WHERE is_premium = TRUE
-                AND premium_expires_at < CURRENT_TIMESTAMP - INTERVAL '3 days'
-            """)
-        else:
-            # SQLite syntax
-            execute_step("""
-                UPDATE users
-                SET is_premium = 0
-                WHERE is_premium = 1
-                AND premium_expires_at < datetime('now', '-3 days')
-            """)
+        from app.services.subscription_service import cleanup_expired_prime_users
+        from sqlalchemy.orm import Session
+        with Session(engine) as session:
+            cleanup_expired_prime_users(session)

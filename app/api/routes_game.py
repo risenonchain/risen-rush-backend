@@ -60,6 +60,10 @@ def start_session(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # Ensure fresh sub check
+    from app.services.subscription_service import check_and_update_user_subscription
+    check_and_update_user_subscription(db, current_user)
+
     remaining = get_remaining_trials(current_user.id, db)
     if current_user.is_premium:
         success, trial_source = True, "premium"

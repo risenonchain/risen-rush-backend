@@ -14,6 +14,7 @@ from app.models.user import User
 from app.models.game_session import GameSession
 from app.models.season import Season
 from app.models.point_wallet import PointWallet
+from app.services.subscription_service import cleanup_expired_prime_users
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -272,3 +273,36 @@ def export_users_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@router.post("/prime/cleanup")
+def trigger_prime_cleanup(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Manually trigger the cleanup of expired Prime users who passed the grace period.
+    """
+    reverted_count = cleanup_expired_prime_users(db)
+    return {"message": f"Cleanup successful. {reverted_count} users reverted to standard."}
+
+
+@router.post("/prime/grant/{user_id}")
+def grant_prime_access(
+    user_id: int,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Grant 30 days of Prime access to a specific user.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.is_premium = True
+    user.premium_expires_at = datetime.utcnow() + timedelta(days=30)
+    db.add(user)
+    db.commit()
+
+    return {"message": f"Prime access granted to {user.username} until {user.premium_expires_at.isoformat()}"}
