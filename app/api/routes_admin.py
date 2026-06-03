@@ -209,6 +209,7 @@ def get_detailed_users(
             "username": u.username,
             "email": u.email,
             "is_premium": u.is_premium,
+            "premium_expires_at": u.premium_expires_at.isoformat() if u.premium_expires_at else None,
             "best_score": u.best_score,
             "best_level": u.best_level,
             "available_points": w.available_points,
