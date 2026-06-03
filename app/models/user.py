@@ -51,4 +51,6 @@ class User(Base):
     agreed_to_terms = Column(Boolean, default=False, nullable=False)
     marketing_consent = Column(Boolean, default=False, nullable=False)
 
+    is_admin_granted = Column(Boolean, default=False, nullable=False)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

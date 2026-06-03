@@ -295,13 +295,26 @@ def grant_prime_access(
     db: Session = Depends(get_db),
 ):
     """
-    Grant 30 days of Prime access to a specific user.
+    Grant 30 days of Prime access to a specific user (Limit: 2 active grants).
     """
+    # Check current active admin-granted accounts
+    active_grants = db.query(User).filter(
+        User.is_admin_granted == True,
+        User.is_premium == True
+    ).count()
+
+    if active_grants >= 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Admin grant limit reached. You can only have 2 active neural rewards at a time."
+        )
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     user.is_premium = True
+    user.is_admin_granted = True
     user.premium_expires_at = datetime.utcnow() + timedelta(days=30)
     db.add(user)
     db.commit()

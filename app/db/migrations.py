@@ -43,7 +43,8 @@ def run_migrations():
             ("is_admin", f"BOOLEAN DEFAULT {bool_false}"),
             ("agreed_to_terms", f"BOOLEAN DEFAULT {bool_false}"),
             ("marketing_consent", f"BOOLEAN DEFAULT {bool_false}"),
-            ("telegram_chat_id", "VARCHAR")
+            ("telegram_chat_id", "VARCHAR"),
+            ("is_admin_granted", f"BOOLEAN DEFAULT {bool_false}")
         ]
 
         for col_name, col_type in columns:

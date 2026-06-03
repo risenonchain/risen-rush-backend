@@ -18,6 +18,7 @@ def cleanup_expired_prime_users(db: Session):
     count = 0
     for user in expired_users:
         user.is_premium = False
+        user.is_admin_granted = False # Open up the slot for a new grant
         db.add(user)
         count += 1
 

@@ -30,12 +30,15 @@ async def admin_login(
         )
 
     # --- Neural Sync (8-Digit TOTP) Check ---
-    secret = os.getenv("ADMIN_TOTP_SECRET")
-    if not secret:
+    secret_raw = os.getenv("ADMIN_TOTP_SECRET")
+    if not secret_raw:
         # Emergency log if secret is missing in environment
         print("CRITICAL: ADMIN_TOTP_SECRET not found in environment!")
     else:
-        totp = pyotp.TOTP(secret, digits=8)
+        import base64
+        # Encode to Base32 to match the user's custom generation logic
+        secret_b32 = base64.b32encode(secret_raw.encode()).decode()
+        totp = pyotp.TOTP(secret_b32, digits=8)
         if not x_admin_otp or not totp.verify(x_admin_otp):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
