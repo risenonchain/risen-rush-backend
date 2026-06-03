@@ -10,7 +10,7 @@ from app.models.game_session import GameSession
 from app.models.point_wallet import PointWallet
 from app.models.referral_reward import ReferralReward
 from app.models.user import User
-from app.models.league import LeagueParticipant, LeagueMatch, LeagueFixture, LeagueTopScore, LeagueDeepestRunner
+from app.models.league import LeagueParticipant, LeagueMatch, LeagueFixture, LeagueTopScore, LeagueDeepestRunner, LeagueChallenge
 from app.schemas.game import (
     FinishSessionRequest,
     StartSessionRequest,

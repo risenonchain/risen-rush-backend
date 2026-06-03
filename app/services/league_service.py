@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.models.league import LeagueStanding, LeagueMatch, LeagueFixture, LeagueEvent
+from app.models.league import LeagueStanding, LeagueMatch, LeagueFixture, LeagueEvent, LeagueChallenge
 from datetime import datetime
 
 def update_league_standings(db: Session, league_id: int, user_id: int, score: int, opponent_score: int, result: str):
