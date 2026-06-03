@@ -2,6 +2,7 @@ import os
 import pyotp
 import base64
 import time
+from datetime import datetime
 from fastapi import APIRouter, Request, Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -13,8 +14,6 @@ from app.schemas.auth import TokenResponse
 router = APIRouter(prefix="/admin-auth", tags=["AdminAuth"])
 
 # --- GLOBAL SYNC MEMORY (Replay Protection) ---
-# Stores used OTPs to prevent reuse within their valid window.
-# Format: { "otp_code": expiry_timestamp }
 USED_NEURAL_CODES = {}
 
 @router.post("/login", response_model=TokenResponse)
@@ -25,9 +24,10 @@ async def admin_login(
     x_admin_otp: str = Header(None)
 ):
     # --- ULTRA-SECURE BACKEND CREDENTIALS ---
-    MASTER_ADMIN_USER = os.getenv("MASTER_ADMIN_USERNAME", "risen_master_admin")
-    MASTER_ADMIN_PASS = os.getenv("MASTER_ADMIN_PASSWORD")
-    TOTP_SECRET = os.getenv("ADMIN_TOTP_SECRET")
+    # Clean variables (remove accidental spaces or quotes from Render)
+    MASTER_ADMIN_USER = (os.getenv("MASTER_ADMIN_USERNAME") or "risen_master_admin").strip().strip('"').strip("'")
+    MASTER_ADMIN_PASS = (os.getenv("MASTER_ADMIN_PASSWORD") or "").strip().strip('"').strip("'")
+    TOTP_SECRET = (os.getenv("ADMIN_TOTP_SECRET") or "").strip().strip('"').strip("'")
 
     # 1. Credentials Check
     if not MASTER_ADMIN_PASS:
@@ -45,7 +45,6 @@ async def admin_login(
 
     # --- REPLAY PROTECTION ---
     now = time.time()
-    # Clean up old codes from memory
     expired_codes = [code for code, expiry in USED_NEURAL_CODES.items() if expiry < now]
     for code in expired_codes:
         del USED_NEURAL_CODES[code]
@@ -53,7 +52,7 @@ async def admin_login(
     if x_admin_otp in USED_NEURAL_CODES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Neural Error: Sync Code already consumed. Generate a fresh one."
+            detail="Neural Error: Sync Code already consumed."
         )
 
     try:
@@ -63,26 +62,26 @@ async def admin_login(
         if not x_admin_otp:
             raise HTTPException(status_code=403, detail="Neural Sync Required.")
 
-        # Allow 60 seconds of time drift (valid_window=2)
-        if not totp.verify(x_admin_otp, valid_window=2):
+        # Increase valid_window to 10 (5 minutes drift) for diagnostics
+        if not totp.verify(x_admin_otp, valid_window=10):
+            server_time = datetime.utcnow().strftime('%H:%M:%S')
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Neural Sync Failed: Handshake Invalid"
+                detail=f"Neural Sync Failed: Handshake Invalid (Server Time: {server_time} UTC)"
             )
 
-        # Success! Consume the code so it can't be used again for 2 minutes
-        USED_NEURAL_CODES[x_admin_otp] = now + 120
+        # Success! Consume code
+        USED_NEURAL_CODES[x_admin_otp] = now + 300 # Keep in memory for 5 mins
 
     except HTTPException:
         raise
     except Exception as e:
-         raise HTTPException(status_code=500, detail=f"Neural Engine Sync Error: {str(e)}")
+         raise HTTPException(status_code=500, detail=f"Neural Engine Error: {str(e)}")
 
-    # 3. Find a real Admin in DB to attach the session token permissions
-    # This prevents mixing up with the 'admin' player by checking for is_admin=True
+    # 3. Final handshake with DB
     user = db.query(User).filter(User.is_admin == True).first()
     if not user:
-         raise HTTPException(status_code=500, detail="Neural Error: No authorized Admin node found in DB.")
+         raise HTTPException(status_code=500, detail="Neural Error: No authorized Admin node in DB.")
 
     token = create_access_token(
         data={
