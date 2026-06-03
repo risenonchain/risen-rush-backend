@@ -281,8 +281,9 @@ def get_current_user(
         )
 
     # --- Subscription Grace Period Logic ---
-    from app.services.subscription_service import check_and_update_user_subscription
-    check_and_update_user_subscription(db, user)
+    if user.is_premium and not user.is_admin:
+        from app.services.subscription_service import check_and_update_user_subscription
+        check_and_update_user_subscription(db, user)
 
     return user
 
