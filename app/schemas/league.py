@@ -184,6 +184,9 @@ class LeagueChallengeOut(LeagueChallengeBase):
     challenger_username: Optional[str] = None
     challenged_username: Optional[str] = None
     status: str
+    challenger_score: Optional[int] = None
+    challenged_score: Optional[int] = None
+    winner_id: Optional[int] = None
     created_at: datetime
     expires_at: datetime
 

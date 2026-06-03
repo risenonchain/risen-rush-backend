@@ -280,6 +280,15 @@ def get_current_user(
             detail="User not found",
         )
 
+    # --- Subscription Grace Period Logic ---
+    if user.is_premium and user.premium_expires_at:
+        # Check if expired beyond 3 days grace period
+        if datetime.utcnow() > user.premium_expires_at + timedelta(days=3):
+            user.is_premium = False
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
     return user
 
 

@@ -118,17 +118,42 @@ def run_migrations():
         if is_postgres:
             execute_step(f"ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS is_league_game BOOLEAN DEFAULT {bool_false}")
             execute_step("ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS league_match_id INTEGER")
+            execute_step(f"ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS is_p2p BOOLEAN DEFAULT {bool_false}")
+            execute_step("ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS league_challenge_id INTEGER")
             execute_step("ALTER TABLE league_fixtures ADD COLUMN IF NOT EXISTS stage VARCHAR DEFAULT 'group'")
             execute_step("ALTER TABLE league_fixtures ADD COLUMN IF NOT EXISTS group_name VARCHAR")
             execute_step("ALTER TABLE league_participants ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'active'")
+            execute_step("ALTER TABLE league_challenges ADD COLUMN IF NOT EXISTS winner_id INTEGER")
         else:
             execute_step("ALTER TABLE game_sessions ADD COLUMN is_league_game BOOLEAN DEFAULT 0")
             execute_step("ALTER TABLE game_sessions ADD COLUMN league_match_id INTEGER")
+            execute_step("ALTER TABLE game_sessions ADD COLUMN is_p2p BOOLEAN DEFAULT 0")
+            execute_step("ALTER TABLE game_sessions ADD COLUMN league_challenge_id INTEGER")
             execute_step("ALTER TABLE league_fixtures ADD COLUMN stage VARCHAR DEFAULT 'group'")
             execute_step("ALTER TABLE league_fixtures ADD COLUMN group_name VARCHAR")
             execute_step("ALTER TABLE league_participants ADD COLUMN status VARCHAR DEFAULT 'active'")
+            execute_step("ALTER TABLE league_challenges ADD COLUMN winner_id INTEGER")
 
         try:
             conn.commit()
         except Exception:
             pass
+
+        # --- Immediate Cleanup of Expired Prime Users beyond grace period ---
+        # Grace period is 3 days. Revert to standard if expired more than 3 days ago.
+        if is_postgres:
+            # PostgreSQL syntax
+            execute_step("""
+                UPDATE users
+                SET is_premium = FALSE
+                WHERE is_premium = TRUE
+                AND premium_expires_at < CURRENT_TIMESTAMP - INTERVAL '3 days'
+            """)
+        else:
+            # SQLite syntax
+            execute_step("""
+                UPDATE users
+                SET is_premium = 0
+                WHERE is_premium = 1
+                AND premium_expires_at < datetime('now', '-3 days')
+            """)

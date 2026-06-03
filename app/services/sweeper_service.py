@@ -77,12 +77,9 @@ class SweeperService:
         """
         Returns the data needed for the frontend to call the DustSweeper contract.
         """
-        # In a real-world product, the backend doesn't perform the swap (for security).
-        # Instead, it provides the 'amounts' and 'minRSNOut' for the smart contract call.
-
         return {
             "status": "ready",
-            "contract_address": "0x...", # Will be updated after deployment
+            "contract_address": "0x6Ac725cF68419184704e0dbAB75A507dC3570305",
             "target_token": "0xfaae1faadc569895162c5584ffbca845f4147777",
             "fee_bps": 300,
             "message": "Transaction parameters generated. Please sign in your wallet."

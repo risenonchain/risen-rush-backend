@@ -104,6 +104,18 @@ def force_complete_match(db: Session, match_id: int, winner_id: int = None):
     db.commit()
     return match
 
+def process_challenge_completion(db: Session, challenge: LeagueChallenge):
+    if challenge.challenger_score is not None and challenge.challenged_score is not None:
+        challenge.status = "completed"
+        if challenge.challenger_score > challenge.challenged_score:
+            challenge.winner_id = challenge.challenger_id
+        elif challenge.challenged_score > challenge.challenger_score:
+            challenge.winner_id = challenge.challenged_id
+        else:
+            challenge.winner_id = None
+        db.add(challenge)
+        db.commit()
+
 def cleanup_overdue_matches(db: Session, league_id: int):
     """
     Auto-resolve matches where one player started but the other didn't within 10 mins.

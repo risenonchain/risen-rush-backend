@@ -112,5 +112,6 @@ class LeagueChallenge(Base):
     status = Column(String(20), default='pending') # pending, accepted, rejected, cancelled, completed
     challenger_score = Column(Integer)
     challenged_score = Column(Integer)
+    winner_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, server_default=func.now())
     expires_at = Column(DateTime)

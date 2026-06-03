@@ -279,12 +279,11 @@ def finish_league_session(
             elif challenge.challenged_id == current_user.id:
                 challenge.challenged_score = payload.final_score
 
-            # If both scores are in, mark as completed
-            if challenge.challenger_score is not None and challenge.challenged_score is not None:
-                challenge.status = "completed"
-
             db.add(challenge)
             db.commit()
+
+            from app.services.league_service import process_challenge_completion
+            process_challenge_completion(db, challenge)
 
     db.commit()
     return {"message": "League session recorded"}
