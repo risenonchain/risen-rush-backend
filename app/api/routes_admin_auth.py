@@ -16,6 +16,22 @@ router = APIRouter(prefix="/admin-auth", tags=["AdminAuth"])
 # --- GLOBAL SYNC MEMORY (Replay Protection) ---
 USED_NEURAL_CODES = {}
 
+@router.get("/debug-otp")
+def debug_otp():
+    """
+    Temporary debug endpoint to verify server-side OTP generation.
+    """
+    secret = os.getenv("ADMIN_TOTP_SECRET")
+    if not secret:
+        return {"error": "ADMIN_TOTP_SECRET not set"}
+
+    totp = pyotp.TOTP(secret, digits=8)
+    return {
+        "otp": totp.now(),
+        "timestamp": int(time.time()),
+        "server_time_utc": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    }
+
 @router.post("/login", response_model=TokenResponse)
 async def admin_login(
     request: Request,
@@ -56,28 +72,17 @@ async def admin_login(
         )
 
     try:
-        secret_b32 = base64.b32encode(TOTP_SECRET.encode()).decode()
-
+        # NO RUNTIME ENCODING: We expect a true Base32 secret from the environment
         if not x_admin_otp:
             raise HTTPException(status_code=403, detail="Neural Sync Required.")
 
-        # --- SMART TIME-ZONE OFFSET CORRECTION ---
-        # We check three windows to handle the 1-hour server drift:
-        # 1. Standard (Now)
-        # 2. +1 Hour (3600 seconds ahead)
-        # 3. -1 Hour (3600 seconds behind)
+        # Explicitly use SHA1 and 8 digits (standard TOTP defaults to SHA1)
+        import hashlib
+        totp = pyotp.TOTP(TOTP_SECRET, digits=8, digest=hashlib.sha1)
 
-        verified = False
-        for offset in [0, 3600, -3600]:
-            totp = pyotp.TOTP(secret_b32, digits=8)
-            # Use a tighter window (drift=1) but shift the base time by 'offset'
-            # totp.at() generates/verifies the code for a specific timestamp
-            current_timestamp = int(time.time()) + offset
-            if totp.verify(x_admin_otp, for_time=current_timestamp, valid_window=2):
-                verified = True
-                break
-
-        if not verified:
+        # Verify with a tighter window (1 previous/next 30s interval)
+        # valid_window=2 means check current and the previous/next interval.
+        if not totp.verify(x_admin_otp, valid_window=2):
             server_time = datetime.utcnow().strftime('%H:%M:%S')
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -85,7 +90,7 @@ async def admin_login(
             )
 
         # Success! Consume code
-        USED_NEURAL_CODES[x_admin_otp] = now + 3600 # Keep in memory longer to cover all offsets
+        USED_NEURAL_CODES[x_admin_otp] = now + 90
 
     except HTTPException:
         raise
